@@ -1,0 +1,149 @@
+import Foundation
+
+enum GmailError: LocalizedError {
+    case notConnected, http(Int, String), tokenFailed
+    var errorDescription: String? {
+        switch self {
+        case .notConnected: return "Connect your Gmail account first."
+        case .http(let c, _): return "Gmail error \(c)."
+        case .tokenFailed: return "Couldn't refresh Gmail access — reconnect."
+        }
+    }
+}
+
+/// Gmail REST: lists bank/card alert emails and parses them into transactions.
+enum GmailProvider {
+    /// Senders for Indian bank/card alerts; broad `from:` substrings + content keywords.
+    static func query(days: Int) -> String {
+        "newer_than:\(days)d (from:hdfcbank OR from:axisbank OR from:scapia OR from:federalbank " +
+        "OR \"has been debited\" OR \"has been credited\" OR \"is debited\" OR \"is credited\" " +
+        "OR \"Transaction Amount\" OR \"Credit Card\")"
+    }
+
+    static func fetchTransactions(accessToken: String, days: Int) async throws -> (txns: [SyncedTxn], balances: [BalanceUpdate]) {
+        var ids: [String] = []
+        var pageToken: String?
+        repeat {
+            var c = URLComponents(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages")!
+            c.queryItems = [.init(name: "q", value: query(days: days)), .init(name: "maxResults", value: "100")]
+            if let pt = pageToken { c.queryItems?.append(.init(name: "pageToken", value: pt)) }
+            let json = try await get(c.url!, accessToken) as? [String: Any] ?? [:]
+            ids += (json["messages"] as? [[String: Any]])?.compactMap { $0["id"] as? String } ?? []
+            pageToken = json["nextPageToken"] as? String
+        } while pageToken != nil && ids.count < 600
+
+        var out: [SyncedTxn] = []
+        var balances: [BalanceUpdate] = []
+        for id in ids {
+            guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/\(id)?format=full"),
+                  let msg = try? await get(url, accessToken) as? [String: Any] else { continue }
+            let payload = msg["payload"] as? [String: Any] ?? [:]
+            let headers = payload["headers"] as? [[String: Any]] ?? []
+            func h(_ n: String) -> String { headers.first { ($0["name"] as? String)?.lowercased() == n.lowercased() }?["value"] as? String ?? "" }
+            let src = EmailTransactionParser.Source(id: id, sender: h("From"), subject: h("Subject"),
+                                                    dateHeader: h("Date"), body: bodyText(payload))
+            if let t = EmailTransactionParser.parse(src) { out.append(t) }
+            else if let b = EmailTransactionParser.balance(src) { balances.append(b) }
+        }
+        return (out, balances)
+    }
+
+    // MARK: statement PDFs (attachments)
+    struct StatementMail: Hashable {
+        var messageId: String; var attachmentId: String; var filename: String; var sender: String; var date: Date
+    }
+
+    static func statementQuery(days: Int) -> String {
+        // Require a known BANK/CARD issuer sender AND statement wording, so brokerage /
+        // investment statements (IND Money, Paytm Money, Groww, Zerodha, CAMS, …) are excluded.
+        let issuers = ["hdfcbank", "axisbank", "icicibank", "federalbank", "scapia", "sbicard", "sbi",
+                       "kotak", "idfcfirstbank", "yesbank", "rblbank", "indusind", "aubank", "hsbc",
+                       "standardchartered", "americanexpress", "amex"]
+        let from = issuers.map { "from:\($0)" }.joined(separator: " OR ")
+        let exclude = ["indmoney", "paytmmoney", "groww", "zerodha", "kuvera", "smallcase", "cams", "kfintech",
+                       "camsonline", "mfcentral", "nsdl", "cdsl"].map { "-from:\($0)" }.joined(separator: " ")
+        return "newer_than:\(days)d has:attachment filename:pdf (\(from)) " +
+               "subject:(statement OR e-statement OR \"account statement\" OR \"credit card statement\") " +
+               "\(exclude) -subject:portfolio -subject:holdings -subject:\"capital gains\""
+    }
+
+    static func fetchStatements(accessToken token: String, days: Int) async throws -> [StatementMail] {
+        var ids: [String] = []; var pageToken: String?
+        repeat {
+            var c = URLComponents(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages")!
+            c.queryItems = [.init(name: "q", value: statementQuery(days: days)), .init(name: "maxResults", value: "100")]
+            if let pt = pageToken { c.queryItems?.append(.init(name: "pageToken", value: pt)) }
+            let json = try await get(c.url!, token) as? [String: Any] ?? [:]
+            ids += (json["messages"] as? [[String: Any]])?.compactMap { $0["id"] as? String } ?? []
+            pageToken = json["nextPageToken"] as? String
+        } while pageToken != nil && ids.count < 300
+
+        var out: [StatementMail] = []
+        for id in ids {
+            guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/\(id)?format=full"),
+                  let msg = try? await get(url, token) as? [String: Any] else { continue }
+            let payload = msg["payload"] as? [String: Any] ?? [:]
+            let headers = payload["headers"] as? [[String: Any]] ?? []
+            let sender = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
+            let ms = Double(msg["internalDate"] as? String ?? "") ?? 0
+            let date = Date(timeIntervalSince1970: ms / 1000)
+            for (fn, aid) in attachments(payload) where fn.lowercased().hasSuffix(".pdf") {
+                out.append(StatementMail(messageId: id, attachmentId: aid, filename: fn, sender: sender, date: date))
+            }
+        }
+        return out
+    }
+
+    private static func attachments(_ payload: [String: Any]) -> [(String, String)] {
+        var res: [(String, String)] = []
+        func walk(_ p: [String: Any]) {
+            let fn = p["filename"] as? String ?? ""
+            if !fn.isEmpty, let body = p["body"] as? [String: Any], let aid = body["attachmentId"] as? String { res.append((fn, aid)) }
+            for sub in (p["parts"] as? [[String: Any]]) ?? [] { walk(sub) }
+        }
+        walk(payload); return res
+    }
+
+    static func downloadAttachment(accessToken token: String, messageId: String, attachmentId: String) async throws -> Data {
+        guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/\(messageId)/attachments/\(attachmentId)") else {
+            throw GmailError.http(0, "bad url")
+        }
+        let json = try await get(url, token) as? [String: Any] ?? [:]
+        guard let b = json["data"] as? String, let data = decodeB64URLData(b) else { throw GmailError.http(0, "no attachment data") }
+        return data
+    }
+    private static func decodeB64URLData(_ s: String) -> Data? {
+        var b = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b.count % 4 != 0 { b += "=" }
+        return Data(base64Encoded: b)
+    }
+
+    private static func get(_ url: URL, _ token: String) async throws -> Any {
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else { throw GmailError.http(code, String(decoding: data, as: UTF8.self)) }
+        return (try? JSONSerialization.jsonObject(with: data)) ?? [:]
+    }
+
+    private static func bodyText(_ payload: [String: Any]) -> String {
+        var plain = "", html = ""
+        func walk(_ p: [String: Any]) {
+            let mime = p["mimeType"] as? String ?? ""
+            if let b = (p["body"] as? [String: Any])?["data"] as? String, !b.isEmpty {
+                if mime == "text/plain", plain.isEmpty { plain = decodeB64URL(b) }
+                else if mime == "text/html", html.isEmpty { html = decodeB64URL(b) }
+            }
+            for sub in (p["parts"] as? [[String: Any]]) ?? [] { walk(sub) }
+        }
+        walk(payload)
+        return !plain.isEmpty ? plain : html
+    }
+
+    private static func decodeB64URL(_ s: String) -> String {
+        var b = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b.count % 4 != 0 { b += "=" }
+        return Data(base64Encoded: b).map { String(decoding: $0, as: UTF8.self) } ?? ""
+    }
+}

@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  *{ box-sizing:border-box; -webkit-font-smoothing:antialiased; }
+  html,body{ margin:0; padding:0; }
+  .sa::-webkit-scrollbar{ display:none; }
+  .sa{ -ms-overflow-style:none; scrollbar-width:none; }
+  @keyframes floatA{ 0%,100%{ transform:translate(0,0) scale(1);} 50%{ transform:translate(28px,-22px) scale(1.08);} }
+  @keyframes floatB{ 0%,100%{ transform:translate(0,0) scale(1);} 50%{ transform:translate(-26px,20px) scale(1.1);} }
+  @keyframes floatC{ 0%,100%{ transform:translate(0,0);} 50%{ transform:translate(18px,24px);} }
+  @keyframes popIn{ 0%{ transform:translateY(14px) scale(.98); opacity:0;} 100%{ transform:translateY(0) scale(1); opacity:1;} }
+  @keyframes sheetUp{ 0%{ transform:translateY(100%);} 100%{ transform:translateY(0);} }
+  @keyframes slideIn{ 0%{ transform:translateX(40px); opacity:0;} 100%{ transform:translateX(0); opacity:1;} }
+  @keyframes shimmer{ 0%{ background-position:-200% 0;} 100%{ background-position:200% 0;} }
+  @keyframes shakeX{ 0%,100%{ transform:translateX(0);} 20%,60%{ transform:translateX(-7px);} 40%,80%{ transform:translateX(7px);} }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+  @keyframes toastUp{ 0%{ transform:translate(-50%,16px); opacity:0;} 100%{ transform:translate(-50%,0); opacity:1;} }
+  @keyframes livePulse{ 0%{ box-shadow:0 0 0 0 rgba(31,168,85,.5);} 70%{ box-shadow:0 0 0 6px rgba(31,168,85,0);} 100%{ box-shadow:0 0 0 0 rgba(31,168,85,0);} }
+</style>
+</helmet>
+<div style="min-height:100vh; width:100%; display:flex; align-items:center; justify-content:center; background:radial-gradient(120% 120% at 30% 10%, #efeae1 0%, #d9d3c8 55%, #cdc6ba 100%); font-family:-apple-system,'SF Pro Display','SF Pro Text',system-ui,sans-serif; padding:40px 0;">
+
+  <!-- iPhone 15 Pro -->
+  <div style="position:relative; width:393px; height:852px; border-radius:56px; padding:4px; background:linear-gradient(150deg,#2a2a2e,#4a4a50 18%,#1e1e22 40%,#42424a 70%,#222226); box-shadow:0 50px 100px -20px rgba(40,30,10,.55), 0 0 0 1.5px rgba(0,0,0,.4), inset 0 0 0 1.5px rgba(255,255,255,.06);">
+    <div style="position:absolute; inset:0; border-radius:56px; box-shadow:inset 0 0 2px 3px rgba(255,255,255,.10); pointer-events:none;"></div>
+
+    <!-- screen -->
+    <div style="{{ themeStyle }} position:relative; width:100%; height:100%; border-radius:52px; overflow:hidden; background:#f3eee4;">
+
+      <!-- liquid glass wallpaper -->
+      <div style="position:absolute; inset:0; overflow:hidden; pointer-events:none;">
+        <div style="position:absolute; top:-60px; left:-40px; width:300px; height:300px; border-radius:50%; background:radial-gradient(circle, #FFC24D, #F5A62300); filter:blur(20px); opacity:.78; animation:floatA 14s ease-in-out infinite;"></div>
+        <div style="position:absolute; top:120px; right:-70px; width:280px; height:280px; border-radius:50%; background:radial-gradient(circle, #FF9D8A, #FF9D8A00); filter:blur(22px); opacity:.62; animation:floatB 17s ease-in-out infinite;"></div>
+        <div style="position:absolute; bottom:40px; left:-50px; width:300px; height:300px; border-radius:50%; background:radial-gradient(circle, #7FD7D0, #7FD7D000); filter:blur(26px); opacity:.5; animation:floatC 20s ease-in-out infinite;"></div>
+        <div style="position:absolute; bottom:200px; right:-30px; width:240px; height:240px; border-radius:50%; background:radial-gradient(circle, #C0AEF6, #C0AEF600); filter:blur(24px); opacity:.45; animation:floatA 19s ease-in-out infinite;"></div>
+        <div style="position:absolute; inset:0; background:linear-gradient(180deg, rgba(247,243,235,.25), rgba(247,243,235,.55));"></div>
+      </div>
+
+      <!-- status bar -->
+      <div style="position:absolute; top:0; left:0; right:0; height:54px; z-index:40; display:flex; align-items:center; justify-content:space-between; padding:16px 30px 0; pointer-events:none;">
+        <div style="font-size:15px; font-weight:700; color:var(--ink); letter-spacing:.3px;">9:41</div>
+        <div style="display:flex; align-items:center; gap:7px;">
+          <div style="display:flex; align-items:flex-end; gap:2px; height:11px;">
+            <div style="width:3px; height:4px; background:var(--ink); border-radius:1px;"></div>
+            <div style="width:3px; height:6px; background:var(--ink); border-radius:1px;"></div>
+            <div style="width:3px; height:8px; background:var(--ink); border-radius:1px;"></div>
+            <div style="width:3px; height:11px; background:var(--ink); border-radius:1px;"></div>
+          </div>
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><path d="M8 2.5c2.2 0 4.2.8 5.7 2.2l1.1-1.2C13.1 1.8 10.7.9 8 .9S2.9 1.8 1.2 3.5l1.1 1.2C3.8 3.3 5.8 2.5 8 2.5z" fill="var(--ink)"/><path d="M8 5.6c1.3 0 2.5.5 3.4 1.3l1.1-1.2C11.3 4.5 9.7 3.9 8 3.9s-3.3.6-4.5 1.8l1.1 1.2C5.5 6.1 6.7 5.6 8 5.6z" fill="var(--ink)"/><circle cx="8" cy="9.4" r="1.6" fill="var(--ink)"/></svg>
+          <div style="display:flex; align-items:center; gap:2px;">
+            <div style="width:22px; height:11px; border:1.3px solid var(--ink); border-radius:3px; padding:1.5px; opacity:.9;"><div style="width:72%; height:100%; background:var(--ink); border-radius:1px;"></div></div>
+            <div style="width:1.5px; height:4px; background:var(--ink); border-radius:1px;"></div>
+          </div>
+        </div>
+      </div>
+      <!-- dynamic island -->
+      <div style="position:absolute; top:11px; left:50%; transform:translateX(-50%); width:126px; height:37px; background:#000; border-radius:20px; z-index:45;"></div>
+
+      <!-- CONTENT -->
+      <div class="sa" style="position:absolute; inset:0; overflow-y:auto; padding:60px 18px 120px; z-index:10;">
+
+        <!-- ============ HOME ============ -->
+        <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+        <div style="animation:popIn .4s ease both;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin:6px 4px 16px;">
+            <div>
+              <div style="font-size:14px; color:var(--ink2); font-weight:500;">Good morning, Sahal</div>
+              <div style="font-size:13px; color:var(--ink3); margin-top:2px;">Saturday, 21 June</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:9px;">
+            <div onClick="{{ openSettings }}" style="cursor:pointer; width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">{{ icGearBtn }}</div>
+            <div onClick="{{ toggleGlass }}" style="display:flex; align-items:center; gap:7px; padding:8px 12px; border-radius:30px; cursor:pointer; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+              <div style="display:flex;">{{ icBolt }}</div>
+              <div style="font-size:11px; font-weight:700; color:var(--ink); display:flex; flex-direction:column; line-height:1.1;"><span style="font-size:8px; color:var(--ink3); font-weight:600; letter-spacing:.4px;">LVL 7</span>Builder</div>
+            </div>
+            </div>
+          </div>
+
+          <!-- hero net worth -->
+          <div style="position:relative; padding:22px 22px 20px; border-radius:30px; overflow:hidden; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div>
+                <div style="font-size:12px; color:var(--ink2); font-weight:600; letter-spacing:.3px; text-transform:uppercase;">Liquid net worth</div>
+                <div style="font-size:38px; font-weight:800; color:var(--ink); letter-spacing:-1.2px; margin-top:4px;">{{ totalF }}</div>
+                <div style="display:inline-flex; align-items:center; gap:5px; margin-top:6px; padding:3px 9px; border-radius:20px; background:rgba(31,168,85,.14);">
+                  <span style="color:var(--pos); font-size:12px; font-weight:700;">▲ {{ nwChangeF }}</span>
+                  <span style="color:var(--pos); font-size:12px; font-weight:600;">this month</span>
+                </div>
+              </div>
+              <div onClick="{{ goNet }}" style="cursor:pointer; padding:7px 9px; border-radius:14px; background:var(--g-bg2); border:1px solid var(--g-bd);">
+                <svg width="58" height="26" viewBox="0 0 58 26" fill="none"><polyline points="2,22 12,18 20,20 28,10 36,13 46,5 56,3" stroke="var(--accent)" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+            </div>
+            <!-- milestone bar -->
+            <div style="margin-top:18px;">
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px;">
+                <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink2); font-weight:600;">{{ icMountainSm }} Road to ₹50L</div>
+                <div style="font-size:12px; color:var(--ink); font-weight:700;">{{ toTargetPct }}% · {{ toGoF }} to go</div>
+              </div>
+              <div style="height:11px; border-radius:8px; background:rgba(120,110,90,.16); overflow:hidden;">
+                <div style="width:{{ toTargetW }}; height:100%; border-radius:8px; background:linear-gradient(90deg,#FFB13C,var(--accent2)); box-shadow:0 0 10px rgba(245,166,35,.5);"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- this month + streak -->
+          <div style="display:flex; gap:12px; margin-top:12px;">
+            <div onClick="{{ goPlan }}" style="flex:1; cursor:pointer; padding:16px; border-radius:24px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+              <div style="font-size:11px; color:var(--ink2); font-weight:600; text-transform:uppercase; letter-spacing:.3px;">June spend</div>
+              <div style="font-size:22px; font-weight:800; color:var(--ink); margin-top:4px; letter-spacing:-.5px;">{{ spentTotalF }}</div>
+              <div style="font-size:11px; color:var(--ink3); margin-top:2px;">of {{ planTotalF }} planned</div>
+              <div style="height:6px; border-radius:5px; background:rgba(120,110,90,.16); margin-top:9px; overflow:hidden;"><div style="width:{{ planW }}; height:100%; background:var(--accent); border-radius:5px;"></div></div>
+            </div>
+            <div style="flex:1; padding:16px; border-radius:24px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh); display:flex; flex-direction:column; justify-content:space-between;">
+              <div style="font-size:11px; color:var(--ink2); font-weight:600; text-transform:uppercase; letter-spacing:.3px;">On-plan streak</div>
+              <div style="display:flex; align-items:center; gap:6px;">{{ icFlame }}<span style="font-size:26px; font-weight:800; color:var(--ink);">8</span><span style="font-size:13px; color:var(--ink3); font-weight:600;">months</span></div>
+              <div style="font-size:11px; color:var(--ink3);">Best: 8 · keep it alive</div>
+            </div>
+          </div>
+
+          <!-- categories preview -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:22px 6px 11px;">
+            <div style="font-size:16px; font-weight:700; color:var(--ink);">This month's plan</div>
+            <div onClick="{{ goPlan }}" style="cursor:pointer; font-size:13px; color:var(--accent2); font-weight:600;">All →</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ top3 }}" as="c" hint-placeholder-count="3">
+              <div onClick="{{ c.onOpen }}" style="cursor:pointer; display:flex; align-items:center; gap:12px; padding:13px 15px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="width:34px; height:34px; flex:none; border-radius:11px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ c.iconEl }}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span style="font-size:14px; font-weight:600; color:var(--ink);">{{ c.name }}</span><span style="font-size:13px; color:var(--ink2); font-weight:600;">{{ c.spentF }} <span style="color:var(--ink3); font-weight:500;">/ {{ c.planF }}</span></span></div>
+                  <div style="height:7px; border-radius:5px; background:rgba(120,110,90,.16); overflow:hidden;"><div style="width:{{ c.w }}; height:100%; border-radius:5px; background:{{ c.barC }};"></div></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- accounts quick -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:22px 6px 11px;">
+            <div style="font-size:16px; font-weight:700; color:var(--ink);">Accounts</div>
+            <div onClick="{{ goAcc }}" style="cursor:pointer; font-size:13px; color:var(--accent2); font-weight:600;">Manage →</div>
+          </div>
+          <div style="display:flex; gap:10px; overflow-x:auto;" class="sa">
+            <sc-for list="{{ banks }}" as="b" hint-placeholder-count="3">
+              <div style="flex:none; width:130px; padding:14px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="display:flex; align-items:center; gap:7px;"><div style="width:24px; height:24px; border-radius:7px; background:{{ b.c }}; color:#fff; font-size:8px; font-weight:800; display:flex; align-items:center; justify-content:center;">{{ b.logo }}</div><span style="font-size:11px; color:var(--ink3); font-weight:600;">••{{ b.mask }}</span></div>
+                <div style="font-size:18px; font-weight:800; color:var(--ink); margin-top:10px; letter-spacing:-.4px;">{{ b.balF }}</div>
+                <div style="font-size:11px; color:var(--ink3); margin-top:1px;">{{ b.name }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- recent + upload -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:22px 6px 11px;">
+            <div style="font-size:16px; font-weight:700; color:var(--ink);">Recent activity</div>
+            <div onClick="{{ openTxns }}" style="cursor:pointer; font-size:13px; color:var(--accent2); font-weight:600;">See all →</div>
+          </div>
+          <div style="border-radius:22px; overflow:hidden; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <sc-for list="{{ recent }}" as="t" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:12px; padding:12px 15px; border-bottom:1px solid rgba(120,110,90,.10);">
+                <div style="width:36px; height:36px; border-radius:11px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ t.iconEl }}</div>
+                <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:600; color:var(--ink);">{{ t.m }}</div><div style="font-size:11px; color:var(--ink3);">{{ t.cat }} · {{ t.acc }}</div></div>
+                <div style="font-size:14px; font-weight:700; color:{{ t.col }};">{{ t.amtF }}</div>
+              </div>
+            </sc-for>
+            <div onClick="{{ openUpload }}" style="cursor:pointer; display:flex; align-items:center; gap:12px; padding:14px 15px; background:linear-gradient(90deg, rgba(245,166,35,.14), rgba(245,166,35,.05));">
+              <div style="width:36px; height:36px; border-radius:11px; background:var(--accent); display:flex; align-items:center; justify-content:center;">{{ icDocSm }}</div>
+              <div style="flex:1;"><div style="font-size:14px; font-weight:700; color:var(--ink);">Upload a statement</div><div style="font-size:11px; color:var(--ink2);">HDFC · Axis · Federal · auto-categorised</div></div>
+              <div style="display:flex; color:var(--accent2);">{{ icPlusDark }}</div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ NET WORTH ============ -->
+        <sc-if value="{{ isNet }}" hint-placeholder-val="{{ true }}">
+        <div style="animation:popIn .4s ease both;">
+          <div style="margin:6px 4px 16px;"><div style="font-size:24px; font-weight:800; color:var(--ink); letter-spacing:-.5px;">Net worth</div></div>
+
+          <div style="padding:20px; border-radius:30px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="font-size:13px; color:var(--ink2); font-weight:600;">Total tracked</div>
+            <div style="font-size:36px; font-weight:800; color:var(--ink); letter-spacing:-1px; margin-top:2px;">{{ totalF }}</div>
+            <div style="display:inline-flex; align-items:center; gap:6px; margin-top:4px;"><span style="color:var(--pos); font-size:13px; font-weight:700;">▲ {{ nwChangeF }} ({{ nwChangePct }}%)</span><span style="font-size:12px; color:var(--ink3);">vs last month</span></div>
+
+            <svg width="100%" viewBox="0 0 312 128" style="margin-top:14px; display:block;" preserveAspectRatio="none">
+              <defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#F5A623" stop-opacity="0.34"/><stop offset="100%" stop-color="#F5A623" stop-opacity="0"/></linearGradient></defs>
+              <path d="{{ nwArea }}" fill="url(#nwg)"/>
+              <polyline points="{{ nwLine }}" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="{{ lastCx }}" cy="{{ lastCy }}" r="5" fill="var(--accent)" stroke="#fff" stroke-width="2.5"/>
+            </svg>
+            <div style="display:flex; gap:7px; margin-top:14px;">
+              <div onClick="{{ setR1 }}" style="flex:1; text-align:center; padding:8px 0; border-radius:13px; cursor:pointer; font-size:12px; font-weight:700; color:var(--ink2); background:var(--g-bg2);">1M</div>
+              <div onClick="{{ setR6 }}" style="flex:1; text-align:center; padding:8px 0; border-radius:13px; cursor:pointer; font-size:12px; font-weight:700; color:var(--ink2); background:var(--g-bg2);">6M</div>
+              <div onClick="{{ setR1Y }}" style="flex:1; text-align:center; padding:8px 0; border-radius:13px; cursor:pointer; font-size:12px; font-weight:700; color:#fff; background:var(--accent);">1Y</div>
+              <div onClick="{{ setRAll }}" style="flex:1; text-align:center; padding:8px 0; border-radius:13px; cursor:pointer; font-size:12px; font-weight:700; color:var(--ink2); background:var(--g-bg2);">All</div>
+            </div>
+          </div>
+
+          <!-- breakdown -->
+          <div style="margin:20px 6px 11px; font-size:16px; font-weight:700; color:var(--ink);">Composition</div>
+          <div style="padding:18px; border-radius:26px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; height:14px; border-radius:8px; overflow:hidden; gap:2px;">
+              <sc-for list="{{ seg }}" as="s" hint-placeholder-count="3"><div style="width:{{ s.w }}; height:100%; background:{{ s.c }};"></div></sc-for>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:11px; margin-top:16px;">
+              <sc-for list="{{ seg }}" as="s" hint-placeholder-count="3">
+                <div style="display:flex; align-items:center; gap:10px;"><div style="width:11px; height:11px; border-radius:4px; background:{{ s.c }};"></div><div style="flex:1; font-size:14px; color:var(--ink); font-weight:600;">{{ s.label }}</div><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ s.valF }}</div></div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- milestone ladder -->
+          <div style="margin:22px 6px 11px; display:flex; justify-content:space-between; align-items:center;"><span style="font-size:16px; font-weight:700; color:var(--ink);">Milestone ladder</span><span style="display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink3); font-weight:600;">{{ icTrophy }} 2 reached</span></div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ ms }}" as="m" hint-placeholder-count="6">
+              <div style="display:flex; align-items:center; gap:13px; padding:14px 16px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="width:42px; height:42px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; border:2.5px solid {{ m.ring }}; background:var(--g-bg2);">{{ m.iconEl }}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-size:15px; font-weight:700; color:var(--ink);">{{ m.amtF }}</span><span style="font-size:11px; color:var(--ink3); font-weight:600;">{{ m.name }}</span></div>
+                  <div style="font-size:11px; color:var(--ink3); margin-top:1px;">{{ m.tag }}</div>
+                  <sc-if value="{{ m.active }}" hint-placeholder-val="{{ true }}"><div style="height:6px; border-radius:5px; background:rgba(120,110,90,.16); margin-top:7px; overflow:hidden;"><div style="width:{{ m.pct }}; height:100%; border-radius:5px; background:var(--accent);"></div></div></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ PLAN ============ -->
+        <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ true }}">
+        <div style="animation:popIn .4s ease both;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin:6px 4px 16px;">
+            <div style="font-size:24px; font-weight:800; color:var(--ink); letter-spacing:-.5px;">Monthly plan</div>
+            <div style="display:flex; align-items:center; gap:6px; padding:7px 13px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh); font-size:13px; font-weight:700; color:var(--ink);">June 2026 ▾</div>
+          </div>
+
+          <div style="padding:20px; border-radius:28px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+              <div>
+                <div style="font-size:12px; color:var(--ink2); font-weight:600; text-transform:uppercase; letter-spacing:.3px;">Spent so far</div>
+                <div style="font-size:34px; font-weight:800; color:var(--ink); letter-spacing:-1px; margin-top:3px;">{{ spentTotalF }}</div>
+                <div style="font-size:12px; color:var(--ink3); margin-top:2px;">of {{ planTotalF }} planned</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:14px; font-weight:800; color:var(--pos);">{{ planLeftF }}</div>
+                <div style="font-size:11px; color:var(--ink3);">left to spend</div>
+              </div>
+            </div>
+            <div style="height:10px; border-radius:7px; background:rgba(120,110,90,.16); margin-top:14px; overflow:hidden;"><div style="width:{{ planW }}; height:100%; border-radius:7px; background:linear-gradient(90deg,#FFB13C,var(--accent2));"></div></div>
+            <div style="font-size:11px; color:var(--ink3); margin-top:7px;">{{ planPct }}% of budget used · 10 days left in June</div>
+          </div>
+
+          <div style="margin:20px 6px 11px; font-size:16px; font-weight:700; color:var(--ink);">Plan vs actual</div>
+          <div style="padding:18px 18px 14px; border-radius:26px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:8px; height:96px;">
+              <sc-for list="{{ months }}" as="mm" hint-placeholder-count="6">
+                <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; height:100%; justify-content:flex-end;">
+                  <div style="font-size:9px; font-weight:700; color:var(--ink3);">{{ mm.pctLbl }}</div>
+                  <div style="width:100%; max-width:26px; border-radius:7px 7px 4px 4px; background:rgba(120,110,90,.12); height:100%; display:flex; align-items:flex-end; overflow:hidden;"><div style="width:100%; height:{{ mm.h }}; background:{{ mm.c }}; border-radius:7px 7px 4px 4px;"></div></div>
+                  <div style="font-size:10px; font-weight:600; color:var(--ink2);">{{ mm.m }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; margin-top:12px; padding-top:12px; border-top:1px solid rgba(120,110,90,.12);">
+              <div style="display:flex; align-items:center; gap:6px;"><div style="width:10px; height:10px; border-radius:3px; background:var(--accent);"></div><span style="font-size:11px; color:var(--ink2); font-weight:600;">On plan</span></div>
+              <div style="display:flex; align-items:center; gap:6px;"><div style="width:10px; height:10px; border-radius:3px; background:var(--neg);"></div><span style="font-size:11px; color:var(--ink2); font-weight:600;">Over budget</span></div>
+            </div>
+          </div>
+
+          <div style="margin:20px 6px 11px; display:flex; justify-content:space-between; align-items:center;"><span style="font-size:16px; font-weight:700; color:var(--ink);">Categories</span><span style="font-size:12px; color:var(--ink3); font-weight:600;">7 budgets</span></div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ cats }}" as="c" hint-placeholder-count="7">
+              <div onClick="{{ c.onOpen }}" style="cursor:pointer; display:flex; align-items:center; gap:13px; padding:14px 15px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="width:40px; height:40px; flex:none; border-radius:13px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ c.iconEl }}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span style="font-size:14px; font-weight:700; color:var(--ink);">{{ c.name }}</span><span style="font-size:13px; color:var(--ink2); font-weight:600;">{{ c.spentF }} <span style="color:var(--ink3); font-weight:500;">/ {{ c.planF }}</span></span></div>
+                  <div style="height:7px; border-radius:5px; background:rgba(120,110,90,.16); overflow:hidden;"><div style="width:{{ c.w }}; height:100%; border-radius:5px; background:{{ c.barC }};"></div></div>
+                </div>
+                <div style="text-align:right; flex:none; width:52px;"><div style="font-size:13px; font-weight:800; color:{{ c.barC }};">{{ c.pctLbl }}</div><div style="font-size:10px; color:var(--ink3);">{{ c.leftF }} {{ c.leftLbl }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ GOALS ============ -->
+        <sc-if value="{{ isGoals }}" hint-placeholder-val="{{ true }}">
+        <div style="animation:popIn .4s ease both;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin:6px 4px 16px;">
+            <div style="font-size:24px; font-weight:800; color:var(--ink); letter-spacing:-.5px;">Goals</div>
+            <div onClick="{{ addGoal }}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:20px; background:var(--accent); box-shadow:0 6px 18px rgba(245,166,35,.4); font-size:13px; font-weight:700; color:#fff;">＋ New</div>
+          </div>
+
+          <div style="padding:18px 20px; border-radius:26px; background:linear-gradient(135deg, rgba(245,166,35,.22), rgba(52,199,89,.16)); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <div style="width:52px; height:52px; flex:none; border-radius:16px; background:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(245,166,35,.4);">{{ icBoltBig }}</div>
+              <div style="flex:1;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline;"><span style="font-size:16px; font-weight:800; color:var(--ink);">Level 7 · Builder</span><span style="font-size:12px; font-weight:700; color:var(--ink2);">2,340 XP</span></div>
+                <div style="height:8px; border-radius:6px; background:rgba(255,255,255,.5); margin-top:8px; overflow:hidden;"><div style="width:68%; height:100%; border-radius:6px; background:var(--accent);"></div></div>
+                <div style="font-size:11px; color:var(--ink2); margin-top:6px; font-weight:600;">660 XP to Level 8 · Investor</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:9px; overflow-x:auto; margin-top:14px;" class="sa">
+            <sc-for list="{{ badges }}" as="bd" hint-placeholder-count="6">
+              <div style="flex:none; width:74px; padding:13px 8px; border-radius:18px; text-align:center; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh); opacity:{{ bd.op }};">
+                <div style="display:flex; align-items:center; justify-content:center; height:28px;">{{ bd.iconEl }}</div>
+                <div style="font-size:9px; font-weight:700; color:var(--ink2); margin-top:5px; line-height:1.1;">{{ bd.l }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin:22px 6px 11px; display:flex; justify-content:space-between; align-items:center;"><span style="font-size:16px; font-weight:700; color:var(--ink);">Active quests</span><span style="font-size:12px; color:var(--ink3); font-weight:600;">tap status to update</span></div>
+          <div style="display:flex; flex-direction:column; gap:11px;">
+            <sc-for list="{{ activeGoals }}" as="g" hint-placeholder-count="4">
+              <div style="padding:16px; border-radius:22px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div onClick="{{ g.onEdit }}" style="cursor:pointer; width:44px; height:44px; flex:none; border-radius:14px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ g.iconEl }}</div>
+                  <div onClick="{{ g.onEdit }}" style="flex:1; min-width:0; cursor:pointer;">
+                    <div style="font-size:15px; font-weight:700; color:var(--ink);">{{ g.title }}</div>
+                    <div style="font-size:11px; color:var(--ink3); margin-top:1px;">{{ g.monthlyF }} · by {{ g.deadline }}</div>
+                  </div>
+                  <div onClick="{{ g.onCycle }}" style="cursor:pointer; padding:5px 11px; border-radius:14px; background:rgba(120,110,90,.10); font-size:11px; font-weight:700; color:{{ g.statusC }};">{{ g.statusLbl }}</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:13px; margin-bottom:6px;"><span style="font-size:13px; font-weight:700; color:var(--ink);">{{ g.savedF }} <span style="color:var(--ink3); font-weight:500;">/ {{ g.targetF }}</span></span><span style="font-size:13px; font-weight:800; color:var(--accent2);">{{ g.pctLbl }}</span></div>
+                <div style="height:9px; border-radius:6px; background:rgba(120,110,90,.16); overflow:hidden;"><div style="width:{{ g.w }}; height:100%; border-radius:6px; background:linear-gradient(90deg,#FFB13C,var(--accent2));"></div></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin:22px 6px 11px; font-size:16px; font-weight:700; color:var(--ink);">Achieved &amp; archived</div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ otherGoals }}" as="g" hint-placeholder-count="3">
+              <div style="display:flex; align-items:center; gap:12px; padding:13px 15px; border-radius:18px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh); opacity:.66;">
+                <div onClick="{{ g.onEdit }}" style="cursor:pointer; width:38px; height:38px; flex:none; border-radius:12px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ g.iconElSm }}</div>
+                <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ g.title }}</div><div style="font-size:11px; color:var(--ink3);">{{ g.targetF }} · {{ g.deadline }}</div></div>
+                <div onClick="{{ g.onCycle }}" style="cursor:pointer; padding:5px 11px; border-radius:14px; background:rgba(120,110,90,.10); font-size:11px; font-weight:700; color:{{ g.statusC }};">{{ g.statusLbl }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ ACCOUNTS ============ -->
+        <sc-if value="{{ isAcc }}" hint-placeholder-val="{{ true }}">
+        <div style="animation:popIn .4s ease both;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin:6px 4px 16px;">
+            <div style="font-size:24px; font-weight:800; color:var(--ink); letter-spacing:-.5px;">Accounts</div>
+            <div onClick="{{ openUpload }}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:8px 13px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh); font-size:12px; font-weight:700; color:var(--ink);">↻ Sync</div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:4px 6px 10px;"><span style="font-size:13px; font-weight:700; color:var(--ink2); text-transform:uppercase; letter-spacing:.4px;">Bank accounts</span><span style="font-size:13px; font-weight:800; color:var(--ink);">{{ banksTotalF }}</span></div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ banks }}" as="b" hint-placeholder-count="3">
+              <div style="display:flex; align-items:center; gap:12px; padding:14px 15px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="width:40px; height:40px; flex:none; border-radius:12px; background:{{ b.c }}; color:#fff; font-size:9px; font-weight:800; display:flex; align-items:center; justify-content:center;">{{ b.logo }}</div>
+                <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ b.name }}</div><div style="font-size:11px; color:var(--ink3);">{{ b.type }} · ••{{ b.mask }}</div></div>
+                <div style="text-align:right;"><div style="font-size:15px; font-weight:800; color:var(--ink);">{{ b.balF }}</div><div style="font-size:10px; color:var(--pos); font-weight:600;">● live</div></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div onClick="{{ openConnect }}" style="cursor:pointer; margin-top:9px; display:flex; align-items:center; gap:12px; padding:13px 15px; border-radius:18px; border:1.5px dashed var(--g-bd); background:var(--g-bg);">
+            <div style="width:34px; height:34px; flex:none; border-radius:11px; background:var(--accent); display:flex; align-items:center; justify-content:center;">{{ icLinkDark }}</div>
+            <div style="flex:1; min-width:0;"><div style="font-size:13px; font-weight:700; color:var(--ink);">Link a bank account</div><div style="font-size:11px; color:var(--ink3);">Securely via Account Aggregator</div></div>
+            <div style="display:flex; color:var(--ink3);">{{ icChevR }}</div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 6px 10px;"><span style="font-size:13px; font-weight:700; color:var(--ink2); text-transform:uppercase; letter-spacing:.4px;">Credit cards</span><span style="font-size:13px; font-weight:800; color:var(--neg);">{{ cardsTotalF }} due</span></div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ cards }}" as="c" hint-placeholder-count="2">
+              <div style="padding:15px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="display:flex; justify-content:space-between; align-items:center;"><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ c.name }}</div><div style="font-size:11px; color:var(--ink3);">••{{ c.mask }}</div></div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:10px; margin-bottom:6px;"><span style="font-size:13px; color:var(--ink2); font-weight:600;">{{ c.outF }} <span style="color:var(--ink3);">of {{ c.limitF }}</span></span><span style="font-size:12px; font-weight:700; color:var(--ink2);">{{ c.util }}%</span></div>
+                <div style="height:7px; border-radius:5px; background:rgba(120,110,90,.16); overflow:hidden;"><div style="width:{{ c.w }}; height:100%; border-radius:5px; background:{{ c.utilC }};"></div></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 6px 10px;"><span style="font-size:13px; font-weight:700; color:var(--ink2); text-transform:uppercase; letter-spacing:.4px;">Deposits · FD &amp; RD</span><div onClick="{{ openDeposit }}" style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:var(--accent2);">{{ icPlusDark }} Add</div></div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ deposits }}" as="d" hint-placeholder-count="3">
+              <div style="padding:15px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div style="width:40px; height:40px; flex:none; border-radius:12px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ d.iconEl }}</div>
+                  <div style="flex:1; min-width:0;"><div style="display:flex; align-items:center; gap:7px;"><span style="font-size:14px; font-weight:700; color:var(--ink);">{{ d.bank }} {{ d.tag }}</span><span style="font-size:10px; font-weight:700; color:var(--ink3); padding:1px 7px; border-radius:8px; background:var(--g-bg2);">{{ d.rate }}</span></div><div style="font-size:11px; color:var(--ink3); margin-top:2px;">{{ d.sub }}</div></div>
+                  <div style="text-align:right;"><div style="font-size:15px; font-weight:800; color:var(--ink);">{{ d.curF }}</div><div style="font-size:10px; color:var(--pos); font-weight:600;">● accruing</div></div>
+                </div>
+                <div style="height:6px; border-radius:5px; background:rgba(120,110,90,.16); margin-top:12px; overflow:hidden;"><div style="width:{{ d.prog }}; height:100%; border-radius:5px; background:linear-gradient(90deg,#FFB13C,var(--accent2));"></div></div>
+                <div style="display:flex; justify-content:space-between; margin-top:7px;"><span style="font-size:11px; color:var(--ink3);">Matures {{ d.matDate }} · {{ d.daysLeft }}d left</span><span style="font-size:11px; font-weight:700; color:var(--ink2);">{{ d.matF }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 6px 10px;"><span style="font-size:13px; font-weight:700; color:var(--ink2); text-transform:uppercase; letter-spacing:.4px;">Investments</span><div onClick="{{ openHoldings }}" style="cursor:pointer; display:flex; align-items:center; gap:5px; font-size:13px; font-weight:800; color:var(--accent2);">Portfolio {{ icChevR }}</div></div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ invs }}" as="i" hint-placeholder-count="3">
+              <div onClick="{{ openHoldings }}" style="cursor:pointer; display:flex; align-items:center; gap:12px; padding:14px 15px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="width:40px; height:40px; flex:none; border-radius:12px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ i.iconEl }}</div>
+                <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ i.name }}</div><div style="font-size:11px; color:var(--ink3);">{{ i.sub }}</div></div>
+                <div style="text-align:right;"><div style="font-size:15px; font-weight:800; color:var(--ink);">{{ i.balF }}</div><div style="font-size:11px; color:var(--pos); font-weight:700;">{{ i.gainF }} · {{ i.gpctF }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div onClick="{{ openUpload }}" style="cursor:pointer; margin-top:18px; display:flex; align-items:center; gap:13px; padding:16px; border-radius:22px; background:linear-gradient(100deg, rgba(245,166,35,.18), rgba(245,166,35,.06)); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="width:44px; height:44px; flex:none; border-radius:14px; background:var(--accent); display:flex; align-items:center; justify-content:center;">{{ icDoc }}</div>
+            <div style="flex:1;"><div style="font-size:14px; font-weight:700; color:var(--ink);">Upload statement</div><div style="font-size:11px; color:var(--ink2);">Decrypt password-protected PDFs · auto-categorise</div></div>
+            <div style="display:flex; color:var(--accent2);">{{ icChevR }}</div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ INCOME & TAX ============ -->
+        <sc-if value="{{ isIncome }}" hint-placeholder-val="{{ true }}">
+        <div style="animation:popIn .4s ease both;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin:6px 4px 16px;">
+            <div style="font-size:24px; font-weight:800; color:var(--ink); letter-spacing:-.5px;">Income &amp; Tax</div>
+            <div style="display:flex; align-items:center; gap:6px; padding:7px 13px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh); font-size:13px; font-weight:700; color:var(--ink);">FY 25–26 ▾</div>
+          </div>
+
+          <!-- tax hero -->
+          <div style="padding:22px; border-radius:30px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="font-size:12px; color:var(--ink2); font-weight:600; text-transform:uppercase; letter-spacing:.3px;">Total tax payable</div>
+            <div style="font-size:36px; font-weight:800; color:var(--ink); letter-spacing:-1px; margin-top:3px;">{{ taxTotalF }}</div>
+            <div style="font-size:11px; color:var(--ink3); margin-top:2px;">incl. 4% cess · new regime · 44ADA presumptive</div>
+            <div style="display:flex; gap:10px; margin-top:16px;">
+              <div style="flex:1; padding:12px 14px; border-radius:16px; background:rgba(31,168,85,.12);">
+                <div style="font-size:11px; color:var(--ink2); font-weight:600;">Advance paid</div>
+                <div style="font-size:18px; font-weight:800; color:var(--pos); margin-top:2px;">{{ taxPaidF }}</div>
+              </div>
+              <div style="flex:1; padding:12px 14px; border-radius:16px; background:rgba(229,72,77,.10);">
+                <div style="font-size:11px; color:var(--ink2); font-weight:600;">Pending</div>
+                <div style="font-size:18px; font-weight:800; color:var(--neg); margin-top:2px;">{{ taxPendingF }}</div>
+              </div>
+            </div>
+            <div style="height:9px; border-radius:6px; background:rgba(120,110,90,.16); margin-top:14px; overflow:hidden;"><div style="width:{{ taxPaidW }}; height:100%; border-radius:6px; background:linear-gradient(90deg,#34C759,#1FA855);"></div></div>
+            <div style="display:flex; justify-content:space-between; margin-top:7px;"><span style="font-size:11px; color:var(--ink3);">{{ taxPaidPct }}% paid</span><span style="font-size:11px; color:var(--ink3);">ITR due {{ filingDue }}</span></div>
+          </div>
+
+          <!-- next due banner -->
+          <div style="margin-top:12px; display:flex; align-items:center; gap:12px; padding:15px 16px; border-radius:22px; background:linear-gradient(100deg, rgba(229,72,77,.14), rgba(229,72,77,.05)); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="width:42px; height:42px; flex:none; border-radius:13px; background:var(--neg); display:flex; align-items:center; justify-content:center;">{{ icAlarm }}</div>
+            <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:700; color:var(--ink);">Self-assessment &amp; ITR filing</div><div style="font-size:11px; color:var(--ink2);">{{ taxPendingF }} to clear · {{ daysToFile }} days left</div></div>
+            <div style="text-align:right;"><div style="font-size:14px; font-weight:800; color:var(--neg);">{{ daysToFile }}d</div><div style="font-size:10px; color:var(--ink3);">{{ filingDue }}</div></div>
+          </div>
+
+          <!-- advance tax schedule -->
+          <div style="margin:22px 6px 11px; display:flex; justify-content:space-between; align-items:center;"><span style="font-size:16px; font-weight:700; color:var(--ink);">Advance tax schedule</span><span style="font-size:11px; color:var(--ink3); font-weight:600;">tap to mark paid</span></div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ taxInst }}" as="t" hint-placeholder-count="4">
+              <div onClick="{{ t.onToggle }}" style="cursor:pointer; display:flex; align-items:center; gap:13px; padding:14px 15px; border-radius:20px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                <div style="width:24px; height:24px; flex:none; border-radius:50%; border:2px solid {{ t.dot }}; display:flex; align-items:center; justify-content:center;"><sc-if value="{{ t.paid }}" hint-placeholder-val="{{ false }}">{{ icTaxCheck }}</sc-if></div>
+                <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ t.n }} · {{ t.pctL }}</div><div style="font-size:11px; color:var(--ink3);">Due {{ t.due }}</div></div>
+                <div style="text-align:right;"><div style="font-size:14px; font-weight:800; color:var(--ink);">{{ t.amtF }}</div><div style="font-size:10px; font-weight:700; color:{{ t.statusC }};">{{ t.status }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- tax computation -->
+          <div style="margin:22px 6px 11px; font-size:16px; font-weight:700; color:var(--ink);">How it's calculated</div>
+          <div style="padding:6px 18px; border-radius:26px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid rgba(120,110,90,.10);"><span style="font-size:13px; color:var(--ink2);">Salary income</span><span style="font-size:13px; font-weight:700; color:var(--ink);">{{ salaryF }}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid rgba(120,110,90,.10);"><span style="font-size:13px; color:var(--ink2);">Contract income</span><span style="font-size:13px; font-weight:700; color:var(--ink);">{{ contractF }}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid rgba(120,110,90,.10);"><span style="font-size:13px; color:var(--ink2);">Less 50% presumptive · 44ADA</span><span style="font-size:13px; font-weight:700; color:var(--pos);">−{{ presumptiveF }}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid rgba(120,110,90,.14);"><span style="font-size:14px; font-weight:800; color:var(--ink);">Net taxable income</span><span style="font-size:14px; font-weight:800; color:var(--ink);">{{ taxableF }}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid rgba(120,110,90,.10);"><span style="font-size:13px; color:var(--ink2);">Tax up to ₹24L</span><span style="font-size:13px; font-weight:700; color:var(--ink);">{{ taxTillF }}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid rgba(120,110,90,.10);"><span style="font-size:13px; color:var(--ink2);">30% on income above ₹24L</span><span style="font-size:13px; font-weight:700; color:var(--ink);">{{ taxTill30F }}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid rgba(120,110,90,.10);"><span style="font-size:13px; color:var(--ink2);">Health &amp; edu cess · 4%</span><span style="font-size:13px; font-weight:700; color:var(--ink);">{{ taxCessF }}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:13px 0;"><span style="font-size:14px; font-weight:800; color:var(--ink);">Total tax payable</span><span style="font-size:15px; font-weight:800; color:var(--accent2);">{{ taxTotalF }}</span></div>
+          </div>
+
+          <!-- income by source -->
+          <div style="margin:22px 6px 11px; display:flex; justify-content:space-between; align-items:center;"><span style="font-size:16px; font-weight:700; color:var(--ink);">Income by source</span><div onClick="{{ openIncAdd }}" style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:var(--accent2);">{{ icPlusDark }} Add</div></div>
+          <div style="padding:18px; border-radius:26px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh); display:flex; flex-direction:column; gap:15px;">
+            <sc-for list="{{ incSources }}" as="s" hint-placeholder-count="4">
+              <div onClick="{{ s.onEdit }}" style="cursor:pointer;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+                  <div style="display:flex; align-items:center; gap:8px; min-width:0;"><div style="width:10px; height:10px; flex:none; border-radius:3px; background:{{ s.c }};"></div><span style="font-size:14px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ s.name }}</span><span style="font-size:10px; font-weight:700; color:var(--ink3); padding:2px 7px; border-radius:8px; background:var(--g-bg2); flex:none;">{{ s.kind }}</span></div>
+                  <span style="font-size:14px; font-weight:700; color:var(--ink); flex:none;">{{ s.totalF }}</span>
+                </div>
+                <sc-if value="{{ s.showNative }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px; color:var(--ink3); margin:-2px 0 6px 18px;">{{ s.nativeF }} {{ s.ccyTag }} · converted</div></sc-if>
+                <div style="height:7px; border-radius:5px; background:rgba(120,110,90,.14); overflow:hidden;"><div style="width:{{ s.w }}; height:100%; border-radius:5px; background:{{ s.c }};"></div></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- monthly income -->
+          <div style="margin:22px 6px 11px; font-size:16px; font-weight:700; color:var(--ink);">Monthly income · FY 25–26</div>
+          <div style="padding:18px 12px 14px; border-radius:26px; background:var(--g-bg); backdrop-filter:var(--g-blur); -webkit-backdrop-filter:var(--g-blur); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:3px; height:118px;">
+              <sc-for list="{{ incMonths }}" as="m" hint-placeholder-count="12">
+                <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; height:100%; justify-content:flex-end;">
+                  <div style="width:100%; max-width:16px; border-radius:5px 5px 3px 3px; background:rgba(120,110,90,.10); height:100%; display:flex; align-items:flex-end; overflow:hidden;"><div style="width:100%; height:{{ m.h }}; background:linear-gradient(180deg,#FFB13C,var(--accent2)); border-radius:5px 5px 3px 3px;"></div></div>
+                  <div style="font-size:8px; font-weight:700; color:var(--ink3);">{{ m.m }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!--SCREENS_END-->
+      </div>
+
+      <!-- ============ TAB BAR ============ -->
+      <div style="position:absolute; left:14px; right:14px; bottom:14px; height:66px; z-index:50; display:flex; align-items:center; justify-content:space-around; padding:0 6px; border-radius:30px; background:var(--g-bg); backdrop-filter:blur(30px) saturate(180%); -webkit-backdrop-filter:blur(30px) saturate(180%); border:1px solid var(--g-bd); box-shadow:0 12px 40px rgba(60,44,14,.18);">
+        <div onClick="{{ goHome }}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 5px;">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" stroke="{{ homeCol }}" stroke-width="1.9" stroke-linejoin="round" fill="none"/></svg>
+          <span style="font-size:9px; font-weight:700; color:{{ homeCol }};">Home</span>
+        </div>
+        <div onClick="{{ goPlan }}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 5px;">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="12" width="4" height="8" rx="1.2" stroke="{{ planCol }}" stroke-width="1.9"/><rect x="10" y="7" width="4" height="13" rx="1.2" stroke="{{ planCol }}" stroke-width="1.9"/><rect x="16.5" y="9.5" width="4" height="10.5" rx="1.2" stroke="{{ planCol }}" stroke-width="1.9"/></svg>
+          <span style="font-size:9px; font-weight:700; color:{{ planCol }};">Plan</span>
+        </div>
+        <div onClick="{{ goGoals }}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 5px;">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="{{ goalsCol }}" stroke-width="1.9"/><circle cx="12" cy="12" r="4.3" stroke="{{ goalsCol }}" stroke-width="1.9"/><circle cx="12" cy="12" r="1" fill="{{ goalsCol }}"/></svg>
+          <span style="font-size:9px; font-weight:700; color:{{ goalsCol }};">Goals</span>
+        </div>
+        <div onClick="{{ goNet }}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 5px;">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M3 16.5 9 11l4 3.5 8-8.5" stroke="{{ netCol }}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 6v5M21 6h-5" stroke="{{ netCol }}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span style="font-size:9px; font-weight:700; color:{{ netCol }};">Wealth</span>
+        </div>
+        <div onClick="{{ goIncome }}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 5px;">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="6" width="19" height="12" rx="2.4" stroke="{{ incomeCol }}" stroke-width="1.9"/><circle cx="12" cy="12" r="2.7" stroke="{{ incomeCol }}" stroke-width="1.9"/><path d="M5.5 9v6M18.5 9v6" stroke="{{ incomeCol }}" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <span style="font-size:9px; font-weight:700; color:{{ incomeCol }};">Income</span>
+        </div>
+        <div onClick="{{ goAcc }}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 5px;">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="13" rx="2.4" stroke="{{ accCol }}" stroke-width="1.9"/><path d="M3 10h18" stroke="{{ accCol }}" stroke-width="1.9"/><rect x="15" y="13" width="3.5" height="2.4" rx="1.2" fill="{{ accCol }}"/></svg>
+          <span style="font-size:9px; font-weight:700; color:{{ accCol }};">Accounts</span>
+        </div>
+      </div>
+
+      <!-- home indicator -->
+      <div style="position:absolute; bottom:9px; left:50%; transform:translateX(-50%); width:132px; height:5px; border-radius:3px; background:rgba(30,25,15,.32); z-index:60;"></div>
+
+      <!-- ============ OVERLAY: TRANSACTIONS ============ -->
+      <sc-if value="{{ overlayTxns }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:70; background:var(--sheet-bg); backdrop-filter:blur(30px) saturate(160%); -webkit-backdrop-filter:blur(30px) saturate(160%); animation:slideIn .3s ease both; display:flex; flex-direction:column;">
+        <div style="padding:60px 20px 12px; display:flex; align-items:center; gap:14px;">
+          <div onClick="{{ back }}" style="cursor:pointer; width:38px; height:38px; flex:none; border-radius:50%; background:var(--g-bg); border:1px solid var(--g-bd); display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1; color:var(--ink);">‹</div>
+          <div style="font-size:20px; font-weight:800; color:var(--ink);">All transactions</div>
+        </div>
+        <div style="display:flex; gap:8px; padding:2px 20px 12px; overflow-x:auto;" class="sa">
+          <sc-for list="{{ txnFilters }}" as="f" hint-placeholder-count="4"><div style="flex:none; padding:7px 14px; border-radius:16px; font-size:12px; font-weight:700; background:{{ f.bg }}; color:{{ f.col }}; border:1px solid var(--g-bd);">{{ f.l }}</div></sc-for>
+        </div>
+        <div class="sa" style="flex:1; overflow-y:auto; padding:0 16px 30px;">
+          <div style="border-radius:22px; overflow:hidden; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <sc-for list="{{ txns }}" as="t" hint-placeholder-count="10">
+              <div style="display:flex; align-items:center; gap:12px; padding:13px 15px; border-bottom:1px solid rgba(120,110,90,.10);">
+                <div style="width:38px; height:38px; flex:none; border-radius:12px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center; font-size:18px;">{{ t.ic }}</div>
+                <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:600; color:var(--ink);">{{ t.m }}</div><div style="font-size:11px; color:var(--ink3);">{{ t.d }} · {{ t.cat }} · {{ t.acc }}</div></div>
+                <div style="font-size:14px; font-weight:700; color:{{ t.col }};">{{ t.amtF }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ OVERLAY: CATEGORY DETAIL ============ -->
+      <sc-if value="{{ overlayCat }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:70; background:var(--sheet-bg); backdrop-filter:blur(30px) saturate(160%); -webkit-backdrop-filter:blur(30px) saturate(160%); animation:slideIn .3s ease both; display:flex; flex-direction:column;">
+        <div style="padding:60px 20px 12px; display:flex; align-items:center; gap:14px;">
+          <div onClick="{{ back }}" style="cursor:pointer; width:38px; height:38px; flex:none; border-radius:50%; background:var(--g-bg); border:1px solid var(--g-bd); display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1; color:var(--ink);">‹</div>
+          <div style="display:flex; align-items:center; gap:10px;"><span style="display:flex; width:34px; height:34px; border-radius:11px; background:var(--g-bg2); align-items:center; justify-content:center;">{{ catView.iconEl }}</span><span style="font-size:20px; font-weight:800; color:var(--ink);">{{ catView.name }}</span></div>
+        </div>
+        <div class="sa" style="flex:1; overflow-y:auto; padding:6px 18px 30px;">
+          <div style="padding:20px; border-radius:26px; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+              <div><div style="font-size:12px; color:var(--ink2); font-weight:600;">Spent this month</div><div style="font-size:32px; font-weight:800; color:var(--ink); letter-spacing:-1px; margin-top:3px;">{{ catView.spentF }}</div><div style="font-size:12px; color:var(--ink3); margin-top:1px;">of {{ catView.planF }} budget</div></div>
+              <div style="text-align:right;"><div style="font-size:14px; font-weight:800; color:{{ catView.overC }};">{{ catView.leftF }}</div><div style="font-size:11px; color:var(--ink3);">{{ catView.leftLbl }}</div></div>
+            </div>
+            <div style="height:10px; border-radius:7px; background:rgba(120,110,90,.16); margin-top:14px; overflow:hidden;"><div style="width:{{ catView.w }}; height:100%; border-radius:7px; background:{{ catView.barC }};"></div></div>
+          </div>
+          <div style="margin:18px 4px 10px; font-size:13px; font-weight:700; color:var(--ink2); text-transform:uppercase; letter-spacing:.4px;">Line items</div>
+          <div style="border-radius:22px; overflow:hidden; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <sc-for list="{{ catView.items }}" as="it" hint-placeholder-count="6">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 16px; border-bottom:1px solid rgba(120,110,90,.10);">
+                <div style="min-width:0;"><div style="font-size:14px; font-weight:600; color:var(--ink);">{{ it.name }}</div><div style="font-size:11px; color:var(--ink3);">{{ it.acc }}</div></div>
+                <div style="font-size:14px; font-weight:700; color:var(--ink);">{{ it.amtF }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ OVERLAY: UPLOAD FLOW ============ -->
+      <sc-if value="{{ overlayUpload }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:75; background:var(--sheet-bg); backdrop-filter:blur(34px) saturate(160%); -webkit-backdrop-filter:blur(34px) saturate(160%); animation:slideIn .3s ease both; display:flex; flex-direction:column;">
+        <div style="padding:60px 20px 12px; display:flex; align-items:center; gap:14px;">
+          <div onClick="{{ back }}" style="cursor:pointer; width:38px; height:38px; flex:none; border-radius:50%; background:var(--g-bg); border:1px solid var(--g-bd); display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1; color:var(--ink);">✕</div>
+          <div style="font-size:20px; font-weight:800; color:var(--ink);">Upload statement</div>
+        </div>
+        <div class="sa" style="flex:1; overflow-y:auto; padding:10px 20px 30px;">
+          <div style="display:flex; gap:6px; margin-bottom:22px;">
+            <div style="flex:1; height:4px; border-radius:3px; background:{{ up1c }};"></div>
+            <div style="flex:1; height:4px; border-radius:3px; background:{{ up2c }};"></div>
+            <div style="flex:1; height:4px; border-radius:3px; background:{{ up3c }};"></div>
+            <div style="flex:1; height:4px; border-radius:3px; background:{{ up4c }};"></div>
+          </div>
+
+          <sc-if value="{{ uStep0 }}" hint-placeholder-val="{{ true }}">
+            <div style="font-size:18px; font-weight:800; color:var(--ink); margin-bottom:4px;">Which account?</div>
+            <div style="font-size:13px; color:var(--ink2); margin-bottom:18px;">Choose the bank or card this statement belongs to.</div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <sc-for list="{{ uSources }}" as="s" hint-placeholder-count="4">
+                <div onClick="{{ s.onPick }}" style="cursor:pointer; display:flex; align-items:center; gap:13px; padding:15px; border-radius:20px; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                  <div style="width:42px; height:42px; flex:none; border-radius:12px; background:{{ s.c }}; color:#fff; font-size:9px; font-weight:800; display:flex; align-items:center; justify-content:center;">{{ s.tag }}</div>
+                  <div style="flex:1; min-width:0;"><div style="font-size:15px; font-weight:700; color:var(--ink);">{{ s.name }}</div><div style="font-size:11px; color:var(--ink3);">{{ s.sub }}</div></div>
+                  <div style="font-size:20px; color:var(--ink3);">›</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ uStep1 }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:18px; font-weight:800; color:var(--ink); margin-bottom:4px;">Select PDF</div>
+            <div style="font-size:13px; color:var(--ink2); margin-bottom:18px;">{{ uSourceName }} statement · PDF format</div>
+            <div onClick="{{ pickFile }}" style="cursor:pointer; padding:40px 20px; border-radius:24px; border:2px dashed var(--g-bd); background:var(--g-bg); text-align:center;">
+              <div style="display:flex; justify-content:center;">{{ icDocBig }}</div>
+              <div style="font-size:15px; font-weight:700; color:var(--ink); margin-top:10px;">Tap to choose file</div>
+              <div style="font-size:12px; color:var(--ink3); margin-top:4px;">or drag a PDF here</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ uStep2 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; align-items:center; gap:12px; padding:14px; border-radius:18px; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh); margin-bottom:20px;">
+              <div style="width:38px; height:38px; flex:none; border-radius:11px; background:var(--neg); display:flex; align-items:center; justify-content:center;">{{ icLock }}</div>
+              <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ uFile }}</div><div style="font-size:11px; color:var(--ink3);">Password protected</div></div>
+            </div>
+            <div style="font-size:18px; font-weight:800; color:var(--ink); margin-bottom:4px;">Enter PDF password</div>
+            <div style="font-size:13px; color:var(--ink2); margin-bottom:16px;">Banks lock statements with your DOB or PAN. Decryption stays on-device.</div>
+            <div style="animation:{{ uShakeAnim }};">
+              <input type="password" value="{{ uPassword }}" onInput="{{ onPass }}" placeholder="e.g. SAHA1234" style="width:100%; padding:16px; border-radius:16px; border:1.5px solid {{ uPassBd }}; background:var(--g-bg); font-size:16px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; box-sizing:border-box;"/>
+            </div>
+            <sc-if value="{{ uShake }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px; color:var(--neg); font-weight:600; margin-top:8px;">Password must be at least 4 characters</div></sc-if>
+            <div onClick="{{ unlock }}" style="cursor:pointer; margin-top:18px; padding:16px; border-radius:16px; background:var(--accent); text-align:center; font-size:15px; font-weight:700; color:#fff; box-shadow:0 8px 20px rgba(245,166,35,.4);">Unlock &amp; parse</div>
+          </sc-if>
+
+          <sc-if value="{{ uStep3 }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:50px 20px; text-align:center;">
+              <div style="width:60px; height:60px; margin:0 auto; border-radius:50%; border:4px solid rgba(245,166,35,.2); border-top-color:var(--accent); animation:spin 1s linear infinite;"></div>
+              <div style="font-size:16px; font-weight:700; color:var(--ink); margin-top:22px;">Decrypting &amp; reading…</div>
+              <div style="font-size:13px; color:var(--ink2); margin-top:6px;">Extracting transactions and categorising</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ uStep4 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; align-items:center; gap:10px; padding:14px; border-radius:18px; background:rgba(31,168,85,.12); border:1px solid rgba(31,168,85,.3); margin-bottom:18px;">
+              <div style="display:flex;">{{ icCheckBig }}</div>
+              <div><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ uParsedCount }} transactions found</div><div style="font-size:11px; color:var(--ink2);">Auto-categorised · review &amp; import</div></div>
+            </div>
+            <div style="border-radius:20px; overflow:hidden; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+              <sc-for list="{{ uParsedPreview }}" as="t" hint-placeholder-count="6">
+                <div style="display:flex; align-items:center; gap:11px; padding:12px 14px; border-bottom:1px solid rgba(120,110,90,.10);">
+                  <div style="width:34px; height:34px; flex:none; border-radius:10px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ t.iconEl }}</div>
+                  <div style="flex:1; min-width:0;"><div style="font-size:13px; font-weight:600; color:var(--ink);">{{ t.m }}</div><div style="font-size:10px; color:var(--ink3);">{{ t.cat }}</div></div>
+                  <div style="font-size:13px; font-weight:700; color:{{ t.col }};">{{ t.amtF }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div onClick="{{ importTxns }}" style="cursor:pointer; margin-top:16px; padding:16px; border-radius:16px; background:var(--accent); text-align:center; font-size:15px; font-weight:700; color:#fff; box-shadow:0 8px 20px rgba(245,166,35,.4);">Import {{ uParsedCount }} transactions</div>
+          </sc-if>
+
+          <sc-if value="{{ uStep5 }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:40px 20px; text-align:center;">
+              <div style="width:84px; height:84px; margin:0 auto; border-radius:50%; background:rgba(31,168,85,.15); display:flex; align-items:center; justify-content:center;">{{ icSpark }}</div>
+              <div style="font-size:20px; font-weight:800; color:var(--ink); margin-top:18px;">All imported!</div>
+              <div style="font-size:13px; color:var(--ink2); margin-top:6px; max-width:240px; margin-left:auto; margin-right:auto;">{{ uParsedCount }} transactions added and matched to your plan. +120 XP earned.</div>
+              <div onClick="{{ back }}" style="cursor:pointer; margin-top:24px; padding:15px 30px; border-radius:16px; background:var(--g-bg); border:1px solid var(--g-bd); display:inline-block; font-size:14px; font-weight:700; color:var(--ink);">Done</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ OVERLAY: HOLDINGS / PORTFOLIO ============ -->
+      <sc-if value="{{ overlayHoldings }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:72; background:var(--sheet-bg); backdrop-filter:blur(34px) saturate(160%); -webkit-backdrop-filter:blur(34px) saturate(160%); animation:slideIn .3s ease both; display:flex; flex-direction:column;">
+        <div style="padding:58px 20px 12px; display:flex; align-items:center; gap:13px;">
+          <div onClick="{{ back }}" style="cursor:pointer; width:38px; height:38px; flex:none; border-radius:50%; background:var(--g-bg); border:1px solid var(--g-bd); display:flex; align-items:center; justify-content:center; font-size:22px; line-height:1; color:var(--ink);">‹</div>
+          <div style="flex:1; font-size:20px; font-weight:800; color:var(--ink);">Portfolio</div>
+          <div onClick="{{ openAddH }}" style="cursor:pointer; display:flex; align-items:center; gap:5px; padding:8px 13px; border-radius:18px; background:var(--accent); box-shadow:0 6px 16px rgba(245,166,35,.36); font-size:13px; font-weight:700; color:#fff;">{{ icPlus }} Add</div>
+        </div>
+        <div class="sa" style="flex:1; overflow-y:auto; padding:6px 18px 30px;">
+          <div style="padding:22px; border-radius:28px; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-size:12px; color:var(--ink2); font-weight:600; text-transform:uppercase; letter-spacing:.3px;">Current value</div>
+              <div style="display:flex; align-items:center; gap:5px; font-size:10px; font-weight:700; color:var(--pos);"><span style="width:6px; height:6px; border-radius:50%; background:var(--pos); box-shadow:0 0 0 0 rgba(31,168,85,.5); animation:livePulse 1.8s ease-out infinite;"></span>LIVE</div>
+            </div>
+            <div style="font-size:34px; font-weight:800; color:var(--ink); letter-spacing:-1px; margin-top:3px;">{{ hTotalF }}</div>
+            <div style="display:flex; gap:18px; margin-top:14px;">
+              <div><div style="font-size:11px; color:var(--ink3); font-weight:600;">Total P&amp;L</div><div style="font-size:16px; font-weight:800; color:{{ hPLC }}; margin-top:2px;">{{ hPLF }} · {{ hPLPctF }}</div></div>
+              <div><div style="font-size:11px; color:var(--ink3); font-weight:600;">Invested</div><div style="font-size:16px; font-weight:800; color:var(--ink); margin-top:2px;">{{ hInvested }}</div></div>
+            </div>
+          </div>
+
+          <sc-for list="{{ hGroups }}" as="g" hint-placeholder-count="3">
+            <div style="margin:20px 6px 10px; display:flex; align-items:center; gap:8px;">{{ g.iconEl }}<span style="font-size:14px; font-weight:700; color:var(--ink);">{{ g.label }}</span><span style="font-size:11px; color:var(--ink3); font-weight:600;">{{ g.count }}</span></div>
+            <div style="display:flex; flex-direction:column; gap:9px;">
+              <sc-for list="{{ g.items }}" as="h" hint-placeholder-count="2">
+                <div style="display:flex; align-items:center; gap:12px; padding:14px 15px; border-radius:20px; background:{{ h.flashBg }}; border:1px solid var(--g-bd); box-shadow:var(--g-sh); transition:background .5s ease;">
+                  <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:14px; font-weight:800; color:var(--ink);">{{ h.sym }}</span><span style="font-size:11px; font-weight:700; color:{{ h.dayC }};">{{ h.dayF }}</span></div>
+                    <div style="font-size:11px; color:var(--ink3); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ h.qtyLbl }}</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div style="font-size:14px; font-weight:800; color:var(--ink);">{{ h.valF }}</div>
+                    <div style="font-size:11px; font-weight:700; color:{{ h.plC }};">{{ h.plF }} · {{ h.plPctF }}</div>
+                  </div>
+                  <div style="text-align:right; min-width:58px;">
+                    <div style="font-size:12px; font-weight:700; color:var(--ink2);">{{ h.priceLbl }}</div>
+                    <div style="font-size:9px; color:var(--ink3); font-weight:600;">LTP</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px; color:var(--ink3); text-align:center; margin-top:20px;">Prices update live every few seconds · simulated feed</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SHEET: ADD HOLDING ============ -->
+      <sc-if value="{{ sheetAddH }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:86; display:flex; flex-direction:column; justify-content:flex-end;">
+        <div onClick="{{ closeSheet }}" style="position:absolute; inset:0; background:rgba(20,16,8,.34);"></div>
+        <div class="sa" style="position:relative; background:var(--sheet-solid); border-radius:32px 32px 0 0; padding:10px 22px 30px; max-height:92%; overflow-y:auto; animation:sheetUp .34s cubic-bezier(.22,1,.36,1) both; box-shadow:0 -10px 40px rgba(0,0,0,.2);">
+          <div style="width:40px; height:5px; border-radius:3px; background:rgba(120,110,90,.3); margin:6px auto 18px;"></div>
+          <div style="font-size:20px; font-weight:800; color:var(--ink); margin-bottom:16px;">Add a holding</div>
+
+          <div style="display:flex; gap:8px; padding:5px; border-radius:16px; background:var(--g-bg2); margin-bottom:18px;">
+            <sc-for list="{{ addMarkets }}" as="m" hint-placeholder-count="3">
+              <div onClick="{{ m.onTap }}" style="cursor:pointer; flex:1; text-align:center; padding:9px 0; border-radius:12px; font-size:13px; font-weight:700; background:{{ m.bg }}; color:{{ m.col }};">{{ m.l }}</div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Choose instrument</div>
+          <div class="sa" style="display:flex; flex-direction:column; gap:8px; max-height:210px; overflow-y:auto; margin-bottom:18px;">
+            <sc-for list="{{ instruments }}" as="i" hint-placeholder-count="6">
+              <div onClick="{{ i.onPick }}" style="cursor:pointer; display:flex; align-items:center; gap:11px; padding:12px 14px; border-radius:16px; background:{{ i.bg }}; border:1.5px solid {{ i.bd }};">
+                <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:800; color:var(--ink);">{{ i.sym }}</div><div style="font-size:11px; color:var(--ink3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ i.name }}</div></div>
+                <div style="font-size:13px; font-weight:700; color:var(--ink2);">{{ i.priceLbl }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex; gap:12px; margin-bottom:14px;">
+            <div style="flex:1;"><div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Quantity</div><input value="{{ addQty }}" onInput="{{ onAddQty }}" placeholder="10" inputmode="decimal" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; box-sizing:border-box;"/></div>
+            <div style="flex:1;"><div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Buy price</div><input value="{{ addPrice }}" onInput="{{ onAddPrice }}" placeholder="2710" inputmode="decimal" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; box-sizing:border-box;"/></div>
+          </div>
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Buy date</div>
+          <input value="{{ addDate }}" onInput="{{ onAddDate }}" placeholder="12 Jan 2025" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; margin-bottom:22px; box-sizing:border-box;"/>
+
+          <div onClick="{{ saveHolding }}" style="cursor:pointer; padding:16px; border-radius:16px; background:var(--accent); text-align:center; font-size:16px; font-weight:700; color:#fff; box-shadow:0 8px 22px rgba(245,166,35,.4);">Add to portfolio</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SHEET: BANK CONNECT (Account Aggregator) ============ -->
+      <sc-if value="{{ sheetConnect }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:86; display:flex; flex-direction:column; justify-content:flex-end;">
+        <div onClick="{{ closeSheet }}" style="position:absolute; inset:0; background:rgba(20,16,8,.34);"></div>
+        <div class="sa" style="position:relative; background:var(--sheet-solid); border-radius:32px 32px 0 0; padding:10px 22px 30px; max-height:92%; overflow-y:auto; animation:sheetUp .34s cubic-bezier(.22,1,.36,1) both; box-shadow:0 -10px 40px rgba(0,0,0,.2);">
+          <div style="width:40px; height:5px; border-radius:3px; background:rgba(120,110,90,.3); margin:6px auto 18px;"></div>
+
+          <sc-if value="{{ cStep0 }}" hint-placeholder-val="{{ true }}">
+            <div style="font-size:20px; font-weight:800; color:var(--ink); margin-bottom:4px;">Link a bank</div>
+            <div style="font-size:13px; color:var(--ink2); margin-bottom:18px;">Choose your bank. We connect read-only through the RBI Account Aggregator network.</div>
+            <div style="display:flex; flex-direction:column; gap:9px;">
+              <sc-for list="{{ connectBanks }}" as="b" hint-placeholder-count="6">
+                <div onClick="{{ b.onPick }}" style="cursor:pointer; display:flex; align-items:center; gap:13px; padding:14px; border-radius:18px; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+                  <div style="width:40px; height:40px; flex:none; border-radius:12px; background:{{ b.c }}; color:#fff; font-size:9px; font-weight:800; display:flex; align-items:center; justify-content:center;">{{ b.logo }}</div>
+                  <div style="flex:1; min-width:0;"><div style="font-size:15px; font-weight:700; color:var(--ink);">{{ b.name }}</div><div style="font-size:11px; color:var(--ink3);">{{ b.type }} accounts</div></div>
+                  <div style="display:flex; color:var(--ink3);">{{ icChevR }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ cStep1 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; flex-direction:column; align-items:center; text-align:center; padding-bottom:4px;">
+              <div style="width:60px; height:60px; border-radius:18px; background:{{ cBankC }}; color:#fff; font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center;">{{ cBankLogo }}</div>
+              <div style="font-size:19px; font-weight:800; color:var(--ink); margin-top:14px;">Consent to share</div>
+              <div style="font-size:13px; color:var(--ink2); margin-top:5px; max-width:280px;">{{ cBankName }} will share your account data with Liquid, read-only, via Finvu AA.</div>
+            </div>
+            <div style="margin-top:18px; border-radius:20px; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh); overflow:hidden;">
+              <div style="display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid rgba(120,110,90,.1);">{{ icShieldCheck }}<div style="flex:1;"><div style="font-size:13px; font-weight:700; color:var(--ink);">Balance &amp; transactions</div><div style="font-size:11px; color:var(--ink3);">Read-only · you can revoke anytime</div></div></div>
+              <div style="display:flex; justify-content:space-between; padding:13px 16px; border-bottom:1px solid rgba(120,110,90,.1);"><span style="font-size:13px; color:var(--ink2);">AA handle</span><span style="font-size:13px; font-weight:700; color:var(--ink);">sahal@finvu</span></div>
+              <div style="display:flex; justify-content:space-between; padding:13px 16px; border-bottom:1px solid rgba(120,110,90,.1);"><span style="font-size:13px; color:var(--ink2);">Purpose</span><span style="font-size:13px; font-weight:700; color:var(--ink);">Personal finance</span></div>
+              <div style="display:flex; justify-content:space-between; padding:13px 16px;"><span style="font-size:13px; color:var(--ink2);">Consent valid</span><span style="font-size:13px; font-weight:700; color:var(--ink);">12 months</span></div>
+            </div>
+            <div onClick="{{ connectApprove }}" style="cursor:pointer; margin-top:18px; padding:16px; border-radius:16px; background:var(--accent); text-align:center; font-size:15px; font-weight:700; color:#fff; box-shadow:0 8px 20px rgba(245,166,35,.4);">Approve &amp; connect</div>
+          </sc-if>
+
+          <sc-if value="{{ cStep2 }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:50px 20px; text-align:center;">
+              <div style="width:60px; height:60px; margin:0 auto; border-radius:50%; border:4px solid rgba(245,166,35,.2); border-top-color:var(--accent); animation:spin 1s linear infinite;"></div>
+              <div style="font-size:16px; font-weight:700; color:var(--ink); margin-top:22px;">Connecting to {{ cBankName }}…</div>
+              <div style="font-size:13px; color:var(--ink2); margin-top:6px;">Discovering accounts &amp; fetching live balance</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ cStep3 }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:30px 20px 8px; text-align:center;">
+              <div style="display:flex; justify-content:center;">{{ icShieldCheck2 }}</div>
+              <div style="font-size:20px; font-weight:800; color:var(--ink); margin-top:16px;">{{ cBankName }} linked</div>
+              <div style="font-size:13px; color:var(--ink2); margin-top:6px; max-width:260px; margin-left:auto; margin-right:auto;">Your balance and transactions will now sync automatically.</div>
+              <div onClick="{{ connectFinish }}" style="cursor:pointer; margin-top:24px; padding:16px; border-radius:16px; background:var(--accent); text-align:center; font-size:15px; font-weight:700; color:#fff; box-shadow:0 8px 20px rgba(245,166,35,.4);">Done</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SHEET: ADD FD / RD ============ -->
+      <sc-if value="{{ sheetDeposit }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:86; display:flex; flex-direction:column; justify-content:flex-end;">
+        <div onClick="{{ closeSheet }}" style="position:absolute; inset:0; background:rgba(20,16,8,.34);"></div>
+        <div class="sa" style="position:relative; background:var(--sheet-solid); border-radius:32px 32px 0 0; padding:10px 22px 30px; max-height:92%; overflow-y:auto; animation:sheetUp .34s cubic-bezier(.22,1,.36,1) both; box-shadow:0 -10px 40px rgba(0,0,0,.2);">
+          <div style="width:40px; height:5px; border-radius:3px; background:rgba(120,110,90,.3); margin:6px auto 18px;"></div>
+          <div style="font-size:20px; font-weight:800; color:var(--ink); margin-bottom:16px;">New deposit</div>
+
+          <div style="display:flex; gap:8px; padding:5px; border-radius:16px; background:var(--g-bg2); margin-bottom:18px;">
+            <sc-for list="{{ depSegs }}" as="s" hint-placeholder-count="2">
+              <div onClick="{{ s.onTap }}" style="cursor:pointer; flex:1; text-align:center; padding:9px 0; border-radius:12px; font-size:13px; font-weight:700; background:{{ s.bg }}; color:{{ s.col }};">{{ s.l }}</div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Bank</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
+            <sc-for list="{{ depBanks }}" as="b" hint-placeholder-count="5">
+              <div onClick="{{ b.onTap }}" style="cursor:pointer; padding:9px 15px; border-radius:13px; font-size:13px; font-weight:700; color:var(--ink); background:{{ b.bg }}; border:1.5px solid {{ b.bd }};">{{ b.b }}</div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex; gap:12px; margin-bottom:14px;">
+            <div style="flex:1.4;"><div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">{{ depAmtLabel }}</div><input value="{{ depAmount }}" onInput="{{ onDepAmount }}" placeholder="100000" inputmode="numeric" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; box-sizing:border-box;"/></div>
+            <div style="flex:1;"><div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Rate %</div><input value="{{ depRate }}" onInput="{{ onDepRate }}" placeholder="6.8" inputmode="decimal" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; box-sizing:border-box;"/></div>
+          </div>
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Tenure (months)</div>
+          <input value="{{ depMonths }}" onInput="{{ onDepMonths }}" placeholder="36" inputmode="numeric" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; margin-bottom:22px; box-sizing:border-box;"/>
+
+          <div onClick="{{ saveDeposit }}" style="cursor:pointer; padding:16px; border-radius:16px; background:var(--accent); text-align:center; font-size:16px; font-weight:700; color:#fff; box-shadow:0 8px 22px rgba(245,166,35,.4);">Add deposit</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SHEET: INCOME SOURCE EDITOR ============ -->
+      <sc-if value="{{ sheetIncome }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:86; display:flex; flex-direction:column; justify-content:flex-end;">
+        <div onClick="{{ closeSheet }}" style="position:absolute; inset:0; background:rgba(20,16,8,.34);"></div>
+        <div class="sa" style="position:relative; background:var(--sheet-solid); border-radius:32px 32px 0 0; padding:10px 22px 30px; max-height:92%; overflow-y:auto; animation:sheetUp .34s cubic-bezier(.22,1,.36,1) both; box-shadow:0 -10px 40px rgba(0,0,0,.2);">
+          <div style="width:40px; height:5px; border-radius:3px; background:rgba(120,110,90,.3); margin:6px auto 18px;"></div>
+          <div style="font-size:20px; font-weight:800; color:var(--ink); margin-bottom:16px;">{{ incSheetTitle }}</div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Source name</div>
+          <input value="{{ incName }}" onInput="{{ onIncName }}" placeholder="e.g. Gulf consulting retainer" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; margin-bottom:16px; box-sizing:border-box;"/>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Type</div>
+          <div style="display:flex; gap:8px; padding:5px; border-radius:16px; background:var(--g-bg2); margin-bottom:16px;">
+            <sc-for list="{{ incKinds }}" as="k" hint-placeholder-count="2">
+              <div onClick="{{ k.onTap }}" style="cursor:pointer; flex:1; text-align:center; padding:9px 0; border-radius:12px; font-size:13px; font-weight:700; background:{{ k.bg }}; color:{{ k.col }};">{{ k.k }}</div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Currency</div>
+          <div style="display:flex; gap:8px; margin-bottom:16px;">
+            <sc-for list="{{ incCcys }}" as="c" hint-placeholder-count="4">
+              <div onClick="{{ c.onTap }}" style="cursor:pointer; flex:1; text-align:center; padding:11px 0; border-radius:13px; font-size:13px; font-weight:800; background:{{ c.bg }}; color:{{ c.col }}; border:1px solid var(--g-bd);">{{ c.c }}</div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Annual amount</div>
+          <input value="{{ incAmount }}" onInput="{{ onIncAmount }}" placeholder="500000" inputmode="numeric" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; margin-bottom:22px; box-sizing:border-box;"/>
+
+          <div onClick="{{ saveIncome }}" style="cursor:pointer; padding:16px; border-radius:16px; background:var(--accent); text-align:center; font-size:16px; font-weight:700; color:#fff; box-shadow:0 8px 22px rgba(245,166,35,.4);">Save source</div>
+          <sc-if value="{{ incEditing }}" hint-placeholder-val="{{ false }}"><div onClick="{{ delIncome }}" style="cursor:pointer; margin-top:10px; padding:14px; text-align:center; font-size:14px; font-weight:700; color:var(--neg);">Remove source</div></sc-if>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SHEET: SETTINGS ============ -->
+      <sc-if value="{{ sheetSettings }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:86; display:flex; flex-direction:column; justify-content:flex-end;">
+        <div onClick="{{ closeSheet }}" style="position:absolute; inset:0; background:rgba(20,16,8,.34);"></div>
+        <div class="sa" style="position:relative; background:var(--sheet-solid); border-radius:32px 32px 0 0; padding:10px 22px 30px; max-height:92%; overflow-y:auto; animation:sheetUp .34s cubic-bezier(.22,1,.36,1) both; box-shadow:0 -10px 40px rgba(0,0,0,.2);">
+          <div style="width:40px; height:5px; border-radius:3px; background:rgba(120,110,90,.3); margin:6px auto 18px;"></div>
+          <div style="font-size:22px; font-weight:800; color:var(--ink); margin-bottom:18px;">Settings</div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); text-transform:uppercase; letter-spacing:.4px; margin-bottom:10px;">Display currency</div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ dispCcys }}" as="c" hint-placeholder-count="4">
+              <div onClick="{{ c.onTap }}" style="cursor:pointer; display:flex; align-items:center; gap:13px; padding:14px 15px; border-radius:18px; background:{{ c.bg }}; border:1.5px solid {{ c.bd }};">
+                <div style="width:38px; height:38px; flex:none; border-radius:11px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:var(--ink);">{{ c.sym }}</div>
+                <div style="flex:1; min-width:0;"><div style="font-size:15px; font-weight:700; color:var(--ink);">{{ c.name }}</div><div style="font-size:11px; color:var(--ink3);">{{ c.c }}</div></div>
+                <sc-if value="{{ c.on }}" hint-placeholder-val="{{ false }}"><div style="display:flex; color:var(--accent2);">{{ icCheckBig }}</div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ showModePick }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px; font-weight:700; color:var(--ink2); text-transform:uppercase; letter-spacing:.4px; margin:20px 0 10px;">When switching from ₹</div>
+            <div style="display:flex; flex-direction:column; gap:9px;">
+              <sc-for list="{{ modeOpts }}" as="m" hint-placeholder-count="2">
+                <div onClick="{{ m.onTap }}" style="cursor:pointer; display:flex; align-items:flex-start; gap:12px; padding:14px 15px; border-radius:18px; background:var(--g-bg); border:1.5px solid {{ m.bd }};">
+                  <div style="width:22px; height:22px; flex:none; border-radius:50%; border:2px solid {{ m.dot }}; display:flex; align-items:center; justify-content:center; margin-top:1px;"><sc-if value="{{ m.on }}" hint-placeholder-val="{{ false }}"><div style="width:10px; height:10px; border-radius:50%; background:var(--accent);"></div></sc-if></div>
+                  <div style="flex:1;"><div style="font-size:14px; font-weight:700; color:var(--ink);">{{ m.l }}</div><div style="font-size:11px; color:var(--ink3); margin-top:2px;">{{ m.sub }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); text-transform:uppercase; letter-spacing:.4px; margin:20px 0 10px;">Appearance</div>
+          <div onClick="{{ toggleGlass }}" style="cursor:pointer; display:flex; align-items:center; gap:13px; padding:14px 15px; border-radius:18px; background:var(--g-bg); border:1px solid var(--g-bd); box-shadow:var(--g-sh);">
+            <div style="width:38px; height:38px; flex:none; border-radius:11px; background:var(--g-bg2); display:flex; align-items:center; justify-content:center;">{{ icBolt }}</div>
+            <div style="flex:1;"><div style="font-size:15px; font-weight:700; color:var(--ink);">Liquid glass</div><div style="font-size:11px; color:var(--ink3);">Tap to switch treatment</div></div>
+            <div style="font-size:13px; font-weight:800; color:var(--accent2);">{{ glassLabel }}</div>
+          </div>
+          <div style="font-size:11px; color:var(--ink3); text-align:center; margin-top:18px;">Liquid · personal finance · built for iPhone 15 Pro</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SHEET: GOAL EDITOR ============ -->
+      <sc-if value="{{ sheetGoal }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; z-index:85; display:flex; flex-direction:column; justify-content:flex-end;">
+        <div onClick="{{ closeSheet }}" style="position:absolute; inset:0; background:rgba(20,16,8,.34);"></div>
+        <div class="sa" style="position:relative; background:var(--sheet-solid); border-radius:32px 32px 0 0; padding:10px 22px 30px; max-height:90%; overflow-y:auto; animation:sheetUp .34s cubic-bezier(.22,1,.36,1) both; box-shadow:0 -10px 40px rgba(0,0,0,.2);">
+          <div style="width:40px; height:5px; border-radius:3px; background:rgba(120,110,90,.3); margin:6px auto 18px;"></div>
+          <div style="font-size:20px; font-weight:800; color:var(--ink); margin-bottom:18px;">{{ sheetTitle }}</div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Icon</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px;">
+            <sc-for list="{{ iconOpts }}" as="ic" hint-placeholder-count="12">
+              <div onClick="{{ ic.onPick }}" style="cursor:pointer; width:42px; height:42px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:{{ ic.bg }}; border:1.5px solid {{ ic.bd }};">{{ ic.iconEl }}</div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Title</div>
+          <input value="{{ draftTitle }}" onInput="{{ onDTitle }}" placeholder="e.g. Buy a home" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; margin-bottom:14px; box-sizing:border-box;"/>
+
+          <div style="display:flex; gap:12px; margin-bottom:14px;">
+            <div style="flex:1;"><div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Target ₹</div><input value="{{ draftTarget }}" onInput="{{ onDTarget }}" placeholder="500000" inputmode="numeric" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; box-sizing:border-box;"/></div>
+            <div style="flex:1;"><div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Monthly ₹</div><input value="{{ draftMonthly }}" onInput="{{ onDMonthly }}" placeholder="20000" inputmode="numeric" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; box-sizing:border-box;"/></div>
+          </div>
+
+          <div style="font-size:12px; font-weight:700; color:var(--ink2); margin-bottom:8px;">Deadline</div>
+          <input value="{{ draftDeadline }}" onInput="{{ onDDeadline }}" placeholder="Dec 2027" style="width:100%; padding:14px; border-radius:14px; border:1.5px solid var(--g-bd); background:var(--g-bg); font-size:15px; font-weight:600; color:var(--ink); outline:none; font-family:inherit; margin-bottom:22px; box-sizing:border-box;"/>
+
+          <div onClick="{{ saveGoal }}" style="cursor:pointer; padding:16px; border-radius:16px; background:var(--accent); text-align:center; font-size:16px; font-weight:700; color:#fff; box-shadow:0 8px 22px rgba(245,166,35,.4);">{{ saveLabel }}</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- toast -->
+      <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute; bottom:92px; left:50%; transform:translateX(-50%); z-index:80; padding:11px 20px; border-radius:22px; background:rgba(28,28,30,.9); backdrop-filter:blur(20px); color:#fff; font-size:13px; font-weight:600; white-space:nowrap; box-shadow:0 10px 30px rgba(0,0,0,.3); animation:toastUp .3s ease both;">{{ toast }}</div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:473,&quot;height&quot;:932}}">
+class Component extends DCLogic {
+  state = {
+    glassStyle: 'clear',
+    tab: 'home',
+    overlay: null,        // 'txns' | 'category' | 'upload'
+    catId: null,
+    sheet: null,          // 'goal'
+    editingGoal: null,
+    draft: { title:'', icon:'target', target:'', monthly:'', deadline:'' },
+    nwRange: '1Y',
+    toast: null,
+    upload: { step:0, source:null, file:null, password:'', shake:false, parsedCount:0 },
+    taxPaidIds: ['t1','t2','t3'],
+    displayCcy: 'INR', ccyMode: 'convert',
+    incomeSources: [
+      { id:'ops',  name:'OpsMotor',      kind:'Salary',   amount:130000,  ccy:'INR', c:'#5B7FB8' },
+      { id:'aiir', name:'Aiir Contract', kind:'Contract', amount:934569,  ccy:'INR', c:'#4FA06B' },
+      { id:'lga',  name:'LGA Contract',  kind:'Contract', amount:799324,  ccy:'INR', c:'#9576C0' },
+      { id:'aka',  name:'AKA Contract',  kind:'Contract', amount:4251182, ccy:'INR', c:'#C98A2B' },
+    ],
+    incDraft: { open:false, id:null, name:'', kind:'Contract', amount:'', ccy:'INR' },
+    livePrices: {}, prevClose: {}, flashes: {},
+    holdings: [
+      { id:'h1', market:'IN', sym:'RELIANCE', name:'Reliance Industries', qty:18, buyPrice:2710, buyDate:'12 Jan 2025' },
+      { id:'h2', market:'IN', sym:'HDFCBANK', name:'HDFC Bank', qty:22, buyPrice:1480, buyDate:'04 Mar 2025' },
+      { id:'h3', market:'IN', sym:'TATAMOTORS', name:'Tata Motors', qty:40, buyPrice:760, buyDate:'19 Nov 2024' },
+      { id:'h4', market:'US', sym:'AAPL', name:'Apple Inc.', qty:6, buyPrice:171, buyDate:'08 Aug 2024' },
+      { id:'h5', market:'US', sym:'NVDA', name:'NVIDIA Corp.', qty:9, buyPrice:98, buyDate:'21 Feb 2025' },
+      { id:'h6', market:'MF', sym:'PPFCC', name:'Parag Parikh Flexi Cap', qty:1840, buyPrice:64.2, buyDate:'SIP · since 2023' },
+      { id:'h7', market:'MF', sym:'QUANTSC', name:'Quant Small Cap', qty:560, buyPrice:182, buyDate:'SIP · since 2024' },
+    ],
+    addH: { open:false, market:'IN', sym:null, qty:'', price:'', date:'' },
+    connect: { step:0, bank:null },
+    banksAdded: [],
+    depositsAdded: [],
+    depDraft: { open:false, kind:'FD', bank:'HDFC', amount:'', rate:'', months:'' },
+    goals: [
+      { id:'g1', title:'Reach ₹50L liquid net worth', icon:'mountain', target:5000000, saved:3730000, monthly:90000, deadline:'Dec 2026', status:'active', pinned:true },
+      { id:'g2', title:'Pre-close personal loan', icon:'shield', target:400000, saved:400000, monthly:0, deadline:'Dec 2025', status:'done' },
+      { id:'g3', title:'Faiza PG investment', icon:'grad', target:500000, saved:240000, monthly:40000, deadline:'Mar 2027', status:'active' },
+      { id:'g4', title:"Vava's wedding fund", icon:'ring', target:800000, saved:175000, monthly:25000, deadline:'2028', status:'active' },
+      { id:'g5', title:'Home down payment', icon:'home', target:1500000, saved:350000, monthly:50000, deadline:'2028', status:'active' },
+      { id:'g6', title:'Car down payment', icon:'car', target:400000, saved:90000, monthly:15000, deadline:'2027', status:'active' },
+      { id:'g7', title:'Faiza PG entrance coaching', icon:'book', target:100000, saved:100000, monthly:0, deadline:'Sep 2025', status:'done' },
+      { id:'g8', title:'Emergency fund · 6 months', icon:'shield', target:600000, saved:600000, monthly:0, deadline:'Secured', status:'done' },
+      { id:'g9', title:'Europe trip', icon:'plane', target:300000, saved:45000, monthly:0, deadline:'Postponed', status:'postponed' },
+    ],
+  };
+
+  // ---------- formatters ----------
+  ccyInfo(){ const m={ INR:{code:'INR',sym:'₹',rate:1}, USD:{code:'USD',sym:'$',rate:83.4}, SAR:{code:'SAR',sym:'﷼',rate:22.2}, QAR:{code:'QAR',sym:'﷼',rate:22.9} }; return m[this.state.displayCcy]||m.INR; }
+  isIndianFmt(){ return this.state.displayCcy==='INR' || this.state.ccyMode==='relabel'; }
+  conv(n){ const ci=this.ccyInfo(); if(ci.code==='INR'||this.state.ccyMode==='relabel') return n; return n/ci.rate; }
+  grp(s){ return s.replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+  fmtINR(n){ const ci=this.ccyInfo(); n=this.conv(n); const neg=n<0; n=Math.abs(Math.round(n)); let out;
+    if(this.isIndianFmt()){ let s=String(n); let l3=s.slice(-3); let rest=s.slice(0,-3); if(rest) l3=','+l3; rest=rest.replace(/\B(?=(\d{2})+(?!\d))/g,','); out=rest+l3; }
+    else { out=this.grp(String(n)); }
+    return (neg?'−':'')+ci.sym+out; }
+  fmtC(n){ const ci=this.ccyInfo(); n=this.conv(n); const a=Math.abs(n); const s=n<0?'−':'';
+    if(this.isIndianFmt()){ if(a>=10000000) return s+ci.sym+(a/10000000).toFixed(2).replace(/\.?0+$/,'')+'Cr'; if(a>=100000) return s+ci.sym+(a/100000).toFixed(2).replace(/\.?0+$/,'')+'L'; if(a>=1000) return s+ci.sym+(a/1000).toFixed(1).replace(/\.0$/,'')+'k'; return s+ci.sym+Math.round(a); }
+    if(a>=1e9) return s+ci.sym+(a/1e9).toFixed(2).replace(/\.?0+$/,'')+'B'; if(a>=1e6) return s+ci.sym+(a/1e6).toFixed(2).replace(/\.?0+$/,'')+'M'; if(a>=1e3) return s+ci.sym+(a/1e3).toFixed(1).replace(/\.0$/,'')+'K'; return s+ci.sym+Math.round(a); }
+  // native-currency price (stocks): US in $, others in ₹
+  fmtPrice(v, market){ if(market==='US') return '$'+v.toFixed(2); return '₹'+this.grp(v.toFixed(2)); }
+
+  // ---------- icon system (zen line icons, currentColor) ----------
+  iconPaths(name){ const P={
+    needs:'M3 9h18l-1.5 11a1 1 0 0 1-1 .9H5.5a1 1 0 0 1-1-.9zM8 9V6a4 4 0 0 1 8 0v3',
+    family:'M20.8 6.6a5 5 0 0 0-7.1 0L12 8.3l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 22l8.8-8.3a5 5 0 0 0 0-7.1z',
+    loans:'M3 21h18M4 10h16M5 10 12 4l7 6M6 10v8M10 10v8M14 10v8M18 10v8M4 18h16',
+    investments:'M3 17 9 11l4 4 8-8M16 7h5v5',
+    wants:'M5 8h14l-1 12a1 1 0 0 1-1 .9H7a1 1 0 0 1-1-.9zM9 8V6a3 3 0 0 1 6 0v2',
+    indulgences:'M8 21h8M12 15v6M6 3h12l-1 6a5 5 0 0 1-10 0z',
+    travel:'M21 3 3 11l6.5 2.2L11.8 21 21 3z',
+    bank:'M3 21h18M4 10h16M5 10 12 4l7 6M7 10v8M11 10v8M15 10v8M19 10v8',
+    card:'M2.5 6.5h19a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-19a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM1.5 10h21M6 14.5h4',
+    fd:'M12 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM8.5 13 7 21l5-2.2L17 21l-1.5-8',
+    rd:'M17 2l3.5 3.5L17 9M20 5.5H8.5a4 4 0 0 0-4 4M7 22l-3.5-3.5L7 15M4 18.5h11.5a4 4 0 0 0 4-4',
+    mf:'M21.2 15.9A10 10 0 1 1 8.1 2.8M22 12A10 10 0 0 0 12 2v10z',
+    us:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2.5 9h19M2.5 15h19M12 2a14 14 0 0 1 0 20 14 14 0 0 1 0-20z',
+    india:'M6 20v-5M12 20V8M18 20v-9M3 20h18',
+    target:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+    mountain:'M3 20 9.5 8l3.2 5.5L15 10l6 10z',
+    home:'M3 11l9-7.5 9 7.5M5.5 9.5V20h13V9.5',
+    car:'M5 13l1.6-5.2a2 2 0 0 1 1.9-1.4h7a2 2 0 0 1 1.9 1.4L20 13M4 13h16v4.5h-2.2a1.8 1.8 0 0 1-3.6 0H9.8a1.8 1.8 0 0 1-3.6 0H4z',
+    ring:'M12 9 9.5 12l2.5 8 2.5-8zM9.5 12h5M10 6h4l1 3H9z',
+    grad:'M12 5 2 9.5l10 4.5 10-4.5zM6 11.5V16c0 1.4 2.7 3 6 3s6-1.6 6-3v-4.5',
+    plane:'M21 3 3 11l6.5 2.2L11.8 21 21 3z',
+    book:'M4 4.5A1.5 1.5 0 0 1 5.5 3H19a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2zM8 3v15',
+    shield:'M12 3l8 3v6c0 4.5-3.4 7.6-8 8.8C7.4 18.6 4 15.5 4 11V6z',
+    coins:'M12 2v20M16.5 6H9.8a3.2 3.2 0 0 0 0 6.4h4.4a3.2 3.2 0 0 1 0 6.4H7',
+    plant:'M12 21V11M12 13C12 8.6 9 5 4 5c0 4.4 3 8 8 8zM12 11c0-3.3 2.8-6.5 8-6.5 0 3.3-2.8 6.5-8 6.5z',
+    gift:'M20 12v8.5H4V12M2.5 7.5h19V12h-19zM12 21V7.5M12 7.5H7.7a2.6 2.6 0 0 1 0-5.2C11 2.3 12 7.5 12 7.5zM12 7.5h4.3a2.6 2.6 0 0 0 0-5.2C13 2.3 12 7.5 12 7.5z',
+    bolt:'M13 2 4 14h6.5l-1 8L19 10h-6.5z',
+    flame:'M12 22c4 0 6.8-2.6 6.8-6.4 0-2-1-3.9-2.5-5.4-.4 1.4-1.4 2-2.4 2 .5-2.9-1-5.4-3-6.8.5 2.9-1.5 4.9-3 6.9-1 1.3-1.7 2.7-1.7 4.1C6.2 19.4 8 22 12 22z',
+    trophy:'M6 4h12v3.5a6 6 0 0 1-12 0zM6 6H3.5V8a3 3 0 0 0 3 3M18 6h2.5V8a3 3 0 0 1-3 3M9 19h6M10 15v4M14 15v4',
+    doc:'M14 2.5H6.5a1.5 1.5 0 0 0-1.5 1.5v16a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V8zM14 2.5V8h5M8.5 13h7M8.5 17h5',
+    lock:'M5.5 11h13v9.5h-13zM8 11V7.5a4 4 0 0 1 8 0V11',
+    check:'M20 6.5 9.5 17 4 11.5',
+    checkCircle:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM8 12l3 3 5-6',
+    gear:'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-2.8 1.2v.2a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.7a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1A1.7 1.7 0 0 0 4.3 14H4a2 2 0 1 1 0-4h.2A1.7 1.7 0 0 0 5.4 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.9 2l.1.1A1.7 1.7 0 0 0 10 2.4h.1A1.7 1.7 0 0 0 11.3 1V.8a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 2.8 1.2 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9V8a1.7 1.7 0 0 0 1.4 1.2H24',
+    plus:'M12 5v14M5 12h14',
+    clock:'M12 22a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 8v4.5l3 2M5 3.5 2.5 6M19 3.5 21.5 6',
+    chevR:'M9 5l7 7-7 7',
+    chevD:'M5 9l7 7 7-7',
+    fuel:'M3.5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 13h10M13.5 8H16a2 2 0 0 1 2 2v6.5a1.8 1.8 0 0 0 3.6 0V9.5L18 6',
+    cpu:'M6.5 6.5h11v11h-11zM9.5 9.5h5v5h-5zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3',
+    activity:'M22 12h-4l-3 8L9 4l-3 8H2',
+    wifi:'M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0M12 19.5h.01',
+    play:'M6 4l14 8-14 8z',
+    salary:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v9M8 12.5l4 4 4-4',
+    tag:'M20.6 13.4 12.5 21.5a1.5 1.5 0 0 1-2.1 0L3 14V4.5A1.5 1.5 0 0 1 4.5 3H14l6.6 8.3a1.5 1.5 0 0 1 0 2.1zM7.5 7.5h.01',
+    tv:'M3 6.5h18v11H3zM8 21h8M9 11l4 2.5-4 2.5z',
+    sparkle:'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18 16l.8 2.2L21 19l-2.2.8L18 22l-.8-2.2L15 19l2.2-.8z',
+    wallet:'M3 7.5A1.5 1.5 0 0 1 4.5 6H19a1 1 0 0 1 1 1v2H5.5a.5.5 0 0 0 0 1H21a1 1 0 0 1 1 1v6a1.5 1.5 0 0 1-1.5 1.5h-16A1.5 1.5 0 0 1 3 17zM17 13.5h.01',
+    link:'M9.5 14.5 14.5 9.5M8 10.5 5.5 13a3.5 3.5 0 0 0 5 5l2.5-2.5M16 13.5 18.5 11a3.5 3.5 0 0 0-5-5L11 8.5',
+    shield2:'M12 3l8 3v6c0 4.5-3.4 7.6-8 8.8C7.4 18.6 4 15.5 4 11V6zM9 12l2 2 4-4',
+  }; return P[name]||'M12 7v10M7 12h10'; }
+  icon(name, size, color){ size=size||22; const sw=(name==='check'||name==='checkCircle')?2:1.8;
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"><path d="'+this.iconPaths(name)+'"/></svg>';
+    return React.createElement('span', { style:{ display:'inline-flex', alignItems:'center', justifyContent:'center', color: color||'currentColor', lineHeight:0 }, dangerouslySetInnerHTML:{ __html: svg } });
+  }
+  txnIconName(t){ const map={ 'Indian Oil':'fuel','BigBasket':'needs','Claude Pro':'cpu','Cursor':'cpu','Asics':'tag','Faiza Rent':'home','Sector 7 Gym · PT':'activity','SIP · Mutual Fund':'investments','Electricity Bill':'bolt','Car EMI':'car','Money to Home':'family',"Levi's":'tag','Netflix + Hotstar':'tv','Faiza Allowance':'grad','Broadband':'wifi','Salary Credit':'salary' }; if(map[t.m]) return map[t.m]; const cm={ Needs:'needs',Family:'family',Loans:'loans',Investments:'investments',Wants:'wants',Indulgences:'indulgences',Travel:'travel',Income:'salary' }; return cm[t.cat]||'wallet'; }
+
+  // ---------- markets / live prices ----------
+  catalog(){ return {
+    IN:[ {sym:'RELIANCE',name:'Reliance Industries',base:2958},{sym:'HDFCBANK',name:'HDFC Bank',base:1697},{sym:'TATAMOTORS',name:'Tata Motors',base:982},{sym:'INFY',name:'Infosys',base:1564},{sym:'TCS',name:'Tata Consultancy',base:3842},{sym:'ICICIBANK',name:'ICICI Bank',base:1208},{sym:'ITC',name:'ITC Ltd',base:431},{sym:'ZOMATO',name:'Zomato',base:268},{sym:'DMART',name:'Avenue Supermarts',base:4515},{sym:'BAJFINANCE',name:'Bajaj Finance',base:7188} ],
+    US:[ {sym:'AAPL',name:'Apple Inc.',base:213.4},{sym:'NVDA',name:'NVIDIA Corp.',base:131.2},{sym:'MSFT',name:'Microsoft',base:449.8},{sym:'TSLA',name:'Tesla',base:251.5},{sym:'GOOGL',name:'Alphabet',base:178.3},{sym:'AMZN',name:'Amazon',base:201.7},{sym:'META',name:'Meta Platforms',base:563.2} ],
+    MF:[ {sym:'PPFCC',name:'Parag Parikh Flexi Cap',base:78.9},{sym:'QUANTSC',name:'Quant Small Cap',base:241.6},{sym:'MIRAEELS',name:'Mirae Asset Large Cap',base:104.2},{sym:'AXISBLUE',name:'Axis Bluechip',base:62.4},{sym:'NIFTYIDX',name:'UTI Nifty 50 Index',base:148.7} ],
+  }; }
+  catItem(sym){ const all=[...this.catalog().IN,...this.catalog().US,...this.catalog().MF]; return all.find(x=>x.sym===sym); }
+  componentDidMount(){ this._seedPrices(); this._tick=setInterval(()=>this._tickPrices(), 2200); }
+  componentWillUnmount(){ clearInterval(this._tick); }
+  _seedPrices(){ const lp={}, pc={}; const all=[...this.catalog().IN,...this.catalog().US,...this.catalog().MF]; all.forEach(x=>{ lp[x.sym]=x.base; pc[x.sym]=x.base*(1-(Math.random()*0.03-0.012)); }); this.setState({ livePrices:lp, prevClose:pc }); }
+  _tickPrices(){ if(this.state.tab!=='accounts' && this.state.overlay!=='holdings') return; this.setState(s=>{ const lp={...s.livePrices}, fl={}; Object.keys(lp).forEach(k=>{ const drift=(Math.random()-0.5)*0.008; const nv=Math.max(0.5, lp[k]*(1+drift)); fl[k]= nv>lp[k]?'up':(nv<lp[k]?'dn':null); lp[k]=nv; }); return { livePrices:lp, flashes:fl }; }); }
+  livePx(sym){ return this.state.livePrices[sym]!=null? this.state.livePrices[sym] : (this.catItem(sym)||{base:0}).base; }
+  holdingINR(h){ const px=this.livePx(h.sym); const v=px*h.qty; return h.market==='US'? v*83.4 : v; }
+  holdingCostINR(h){ const v=h.buyPrice*h.qty; return h.market==='US'? v*83.4 : v; }
+  holdingsVM(){
+    const ci=this.ccyInfo();
+    const groups=[ {key:'IN',label:'Indian stocks',icon:'india'}, {key:'US',label:'US stocks',icon:'us'}, {key:'MF',label:'Mutual funds',icon:'mf'} ];
+    let totVal=0, totCost=0;
+    const out=groups.map(g=>{
+      const items=this.state.holdings.filter(h=>h.market===g.key).map(h=>{
+        const px=this.livePx(h.sym); const prev=this.state.prevClose[h.sym]||px; const valINR=this.holdingINR(h); const costINR=this.holdingCostINR(h);
+        const pl=valINR-costINR; const plPct=costINR? pl/costINR*100:0; const day=(px-prev)/prev*100; const flash=this.state.flashes[h.sym];
+        totVal+=valINR; totCost+=costINR;
+        return { id:h.id, sym:h.sym, name:h.name, qtyLbl:h.qty+(g.key==='MF'?' units':' sh')+' · avg '+this.fmtPrice(h.buyPrice,g.key), priceLbl:this.fmtPrice(px,g.key),
+          valF:this.fmtC(valINR), plF:(pl>=0?'+':'−')+this.fmtC(Math.abs(pl)), plPctF:(pl>=0?'+':'−')+Math.abs(plPct).toFixed(1)+'%', plC: pl>=0?'var(--pos)':'var(--neg)',
+          dayF:(day>=0?'▲ ':'▼ ')+Math.abs(day).toFixed(2)+'%', dayC: day>=0?'var(--pos)':'var(--neg)',
+          flashBg: flash==='up'?'rgba(31,168,85,.14)': flash==='dn'?'rgba(229,72,77,.12)':'transparent', onRemove:()=>this.removeHolding(h.id) };
+      });
+      const gv=items.reduce((a,it)=>a+0,0);
+      return { ...g, items, count:items.length, iconEl:this.icon(g.icon,18,'var(--ink)') };
+    });
+    const totPL=totVal-totCost; const totPct=totCost? totPL/totCost*100:0;
+    return { hGroups:out, hTotalF:this.fmtC(totVal), hPLF:(totPL>=0?'+':'−')+this.fmtC(Math.abs(totPL)), hPLPctF:(totPL>=0?'+':'−')+Math.abs(totPct).toFixed(1)+'%', hPLC: totPL>=0?'var(--pos)':'var(--neg)', hInvested:this.fmtC(totCost) };
+  }
+  removeHolding(id){ this.setState(s=>({ holdings:s.holdings.filter(h=>h.id!==id) })); this.toast('Holding removed'); }
+  openHoldings(){ this.setState({ overlay:'holdings' }); }
+  // add holding flow
+  openAddH(){ this.setState({ sheet:'addH', addH:{ open:true, market:'IN', sym:null, qty:'', price:'', date:'' } }); }
+  setAddHMarket(m){ this.setState(s=>({ addH:{...s.addH, market:m, sym:null, price:'' } })); }
+  pickInstrument(sym){ const it=this.catItem(sym); this.setState(s=>({ addH:{...s.addH, sym, price: s.addH.price||String(it.base) } })); }
+  setAddHField(k,v){ this.setState(s=>({ addH:{...s.addH, [k]:v} })); }
+  saveHolding(){ const a=this.state.addH; if(!a.sym){ this.toast('Pick an instrument'); return; } const qty=parseFloat(String(a.qty).replace(/[^\d.]/g,''))||0; const price=parseFloat(String(a.price).replace(/[^\d.]/g,''))||0; if(!qty||!price){ this.toast('Enter qty & price'); return; } const it=this.catItem(a.sym); const nh={ id:'h'+Date.now(), market:a.market, sym:a.sym, name:it.name, qty, buyPrice:price, buyDate:a.date||'Today' }; this.setState(s=>({ holdings:[...s.holdings, nh], sheet:null })); this.toast(it.name+' added · +30 XP'); }
+
+  // ---------- bank connector (Account Aggregator) ----------
+  bankDirectory(){ return [
+    { id:'HDFC', name:'HDFC Bank', logo:'HDFC', c:'#004C8F', type:'Savings' },
+    { id:'AXIS', name:'Axis Bank', logo:'AXIS', c:'#97144D', type:'Savings' },
+    { id:'FED', name:'Federal Bank', logo:'FED', c:'#F2A900', type:'Savings' },
+    { id:'ICICI', name:'ICICI Bank', logo:'ICICI', c:'#AE282E', type:'Savings' },
+    { id:'SBI', name:'State Bank of India', logo:'SBI', c:'#22409A', type:'Savings' },
+    { id:'KOTAK', name:'Kotak Mahindra', logo:'KOTAK', c:'#ED1C24', type:'Savings' },
+  ]; }
+  openConnect(){ this.setState({ sheet:'connect', connect:{ step:0, bank:null } }); }
+  pickConnectBank(id){ const b=this.bankDirectory().find(x=>x.id===id); this.setState(s=>({ connect:{...s.connect, bank:b, step:1 } })); }
+  connectApprove(){ this.setState(s=>({ connect:{...s.connect, step:2 } })); setTimeout(()=>{ this.setState(s=>({ connect:{...s.connect, step:3 } })); }, 2200); }
+  connectFinish(){ const b=this.state.connect.bank; const mask=String(1000+Math.floor(Math.random()*8999)); const bal=Math.round((40+Math.random()*180))*1000; const nb={ name:b.name, type:b.type, mask, bal, logo:b.logo, c:b.c, linked:true }; this.setState(s=>({ banksAdded:[...s.banksAdded, nb], sheet:null })); this.toast(b.name+' linked · balance live'); }
+
+  // ---------- static data ----------
+  banks(){ return [
+    { name:'HDFC Bank', type:'Savings', mask:'4821', bal:185000, logo:'HDFC', c:'#004C8F' },
+    { name:'Axis Bank', type:'Savings', mask:'9032', bal:95000, logo:'AXIS', c:'#97144D' },
+    { name:'Federal Bank', type:'Savings', mask:'7741', bal:30000, logo:'FED', c:'#F2A900' },
+  ]; }
+  cards(){ return [
+    { name:'HDFC Infinia', mask:'6012', out:82000, limit:800000 },
+    { name:'Axis Magnus', mask:'3344', out:46000, limit:500000 },
+  ]; }
+  deposits(){ return [
+    { id:'fd1', kind:'FD', bank:'HDFC', principal:1400000, rate:6.8, startMs:Date.parse('2024-03-15'), matMs:Date.parse('2027-03-15') },
+    { id:'fd2', kind:'FD', bank:'Axis', principal:300000, rate:7.1, startMs:Date.parse('2025-09-01'), matMs:Date.parse('2026-09-01') },
+    { id:'rd1', kind:'RD', bank:'HDFC', monthly:5000, rate:6.5, startMs:Date.parse('2024-01-01'), matMs:Date.parse('2026-12-31'), months:36 },
+  ]; }
+  depositsVM(){ const now=Date.parse('2026-06-21'), YR=365.25*86400000, MO=YR/12;
+    const fmtDate=ms=>{ const d=new Date(ms); return d.toLocaleDateString('en-GB',{month:'short',year:'numeric'}); };
+    const all=[...this.deposits(), ...this.state.depositsAdded];
+    let totalCur=0;
+    const list=all.map(d=>{
+      const span=d.matMs-d.startMs, elapsed=Math.max(0,Math.min(span, now-d.startMs)); const prog=span>0? elapsed/span:0;
+      let cur, mat, sub;
+      if(d.kind==='FD'){ const yrs=span/YR; mat=d.principal*Math.pow(1+d.rate/100, yrs); cur=d.principal*Math.pow(1+d.rate/100, elapsed/YR); sub=this.fmtINR(d.principal)+' principal'; }
+      else { const months=d.months||Math.round(span/MO); const mElapsed=Math.max(0,Math.min(months, Math.round(elapsed/MO))); const i=d.rate/100/12; mat=d.monthly*months + d.monthly*i*months*(months+1)/2; cur=d.monthly*mElapsed + d.monthly*i*mElapsed*(mElapsed+1)/2; sub=this.fmtINR(d.monthly)+'/mo · '+mElapsed+'/'+months+' paid'; }
+      totalCur+=cur;
+      const daysLeft=Math.max(0,Math.round((d.matMs-now)/86400000));
+      return { id:d.id, kind:d.kind, bank:d.bank, rate:d.rate+'% p.a', sub, curF:this.fmtINR(Math.round(cur)), matF:this.fmtINR(Math.round(mat)), matDate:fmtDate(d.matMs), prog:(prog*100).toFixed(0)+'%', daysLeft, gainF:'+'+this.fmtC(Math.round(mat-cur))+' to go', iconEl:this.icon(d.kind==='FD'?'fd':'rd',20,'var(--ink)'), tag:d.kind };
+    });
+    return { depList:list, depTotalCurF:this.fmtC(totalCur) };
+  }
+  openDeposit(){ this.setState({ sheet:'deposit', depDraft:{ open:true, kind:'FD', bank:'HDFC', amount:'', rate:'', months:'' } }); }
+  setDepKind(k){ this.setState(s=>({ depDraft:{...s.depDraft, kind:k } })); }
+  setDepField(k,v){ this.setState(s=>({ depDraft:{...s.depDraft, [k]:v} })); }
+  saveDeposit(){ const d=this.state.depDraft; const amt=parseInt(String(d.amount).replace(/\D/g,''))||0; const rate=parseFloat(d.rate)||(d.kind==='FD'?6.8:6.5); const months=parseInt(d.months)||12; if(!amt){ this.toast('Enter an amount'); return; } const start=Date.parse('2026-06-21'); const mat=start+months*30.4*86400000; const base={ id:'dep'+Date.now(), kind:d.kind, bank:d.bank, rate, startMs:start, matMs:mat }; const nd= d.kind==='FD'? {...base, principal:amt} : {...base, monthly:amt, months}; this.setState(s=>({ depositsAdded:[...s.depositsAdded, nd], sheet:null })); this.toast(d.kind+' added'); }
+  invs(){ return [
+    { name:'Mutual Funds', sub:'SIP · 9 funds', bal:1680000, gain:290000, gpct:20.9 },
+    { name:'US Stocks', sub:'$1,867 · vested RSUs', bal:155000, gain:38000, gpct:32.5 },
+    { name:'India Stocks', sub:'Zerodha · 6 holdings', bal:65000, gain:9000, gpct:16.1 },
+  ]; }
+  planCats(){ return [
+    { id:'needs', name:'Needs', icon:'needs', plan:106000, spent:79400, c:'#C98A2B' },
+    { id:'family', name:'Family', icon:'family', plan:40000, spent:40000, c:'#C56B6B' },
+    { id:'loans', name:'Loans', icon:'loans', plan:52000, spent:52000, c:'#5B7FB8' },
+    { id:'investments', name:'Investments', icon:'investments', plan:70000, spent:65000, c:'#4FA06B' },
+    { id:'wants', name:'Wants', icon:'wants', plan:60000, spent:38500, c:'#9576C0' },
+    { id:'indulgences', name:'Indulgences', icon:'indulgences', plan:25000, spent:31200, c:'#C98A5B' },
+    { id:'travel', name:'Travel', icon:'travel', plan:20000, spent:6800, c:'#3FA3A3' },
+  ]; }
+  catItems(id){ const m = {
+    needs:[ ['Faiza flat expenses',15000,'HDFC Bank'],['EKM flat expenses',30000,'HDFC Bank'],['Electricity · service station',20000,'Infinia'],['Electricity · home',2000,'Infinia'],['Groceries',10000,'Magnus'],['Food',15000,'Infinia'],['Fuel',15000,'Infinia'],['Faiza rent',13000,'HDFC Bank'],['Mobiles & broadband',6000,'Infinia'],['Insurance · term + health',9500,'HDFC Bank'] ],
+    family:[ ['Faiza allowance',10000,'HDFC Bank'],['Money to home',30000,'HDFC Bank'] ],
+    loans:[ ['Car EMI',26000,'HDFC Bank'],['Standing EMIs',14000,'Infinia'],['Loan EMI',12000,'HDFC Bank'] ],
+    investments:[ ['SIP · Mutual funds',50000,'HDFC Bank'],['Arbitrage + Debt',15000,'HDFC Bank'],['Recurring deposit',5000,'HDFC Bank'] ],
+    wants:[ ['Asics running shoes',14500,'Infinia'],['Sector 7 gym + PT',8000,'Magnus'],["Levi's shopping",6500,'Magnus'],['Gadgets & gifts',9500,'Infinia'] ],
+    indulgences:[ ['Claude Pro',2000,'Infinia'],['Cursor',2000,'Infinia'],['Copilot',1000,'Infinia'],['Netflix + Hotstar',900,'Infinia'],['iCloud + Google One',1010,'Infinia'],['Dining out',24290,'Magnus'] ],
+    travel:[ ['Weekend trip · Munnar',6800,'Magnus'] ],
+  }; return m[id]||[]; }
+  txns(){ return [
+    { d:'Jun 20', m:'Indian Oil', cat:'Needs', acc:'HDFC Infinia', amt:-2400, ic:'⛽' },
+    { d:'Jun 19', m:'BigBasket', cat:'Needs', acc:'Axis Magnus', amt:-3150, ic:'🧺' },
+    { d:'Jun 18', m:'Claude Pro', cat:'Indulgences', acc:'HDFC Infinia', amt:-2000, ic:'🤖' },
+    { d:'Jun 18', m:'Cursor', cat:'Indulgences', acc:'HDFC Infinia', amt:-2000, ic:'⌨️' },
+    { d:'Jun 17', m:'Asics', cat:'Wants', acc:'HDFC Infinia', amt:-14500, ic:'👟' },
+    { d:'Jun 15', m:'Faiza Rent', cat:'Needs', acc:'HDFC Bank', amt:-13000, ic:'🏠' },
+    { d:'Jun 14', m:'Sector 7 Gym · PT', cat:'Wants', acc:'Axis Magnus', amt:-8000, ic:'💪' },
+    { d:'Jun 12', m:'SIP · Mutual Fund', cat:'Investments', acc:'HDFC Bank', amt:-50000, ic:'📈' },
+    { d:'Jun 10', m:'Electricity Bill', cat:'Needs', acc:'HDFC Infinia', amt:-20000, ic:'⚡' },
+    { d:'Jun 07', m:'Car EMI', cat:'Loans', acc:'HDFC Bank', amt:-26000, ic:'🚗' },
+    { d:'Jun 05', m:'Money to Home', cat:'Family', acc:'HDFC Bank', amt:-30000, ic:'❤️' },
+    { d:'Jun 03', m:"Levi's", cat:'Wants', acc:'Axis Magnus', amt:-6500, ic:'👕' },
+    { d:'Jun 02', m:'Netflix + Hotstar', cat:'Indulgences', acc:'HDFC Infinia', amt:-900, ic:'🍿' },
+    { d:'Jun 01', m:'Faiza Allowance', cat:'Family', acc:'HDFC Bank', amt:-10000, ic:'🎓' },
+    { d:'Jun 01', m:'Broadband', cat:'Needs', acc:'HDFC Infinia', amt:-3000, ic:'📡' },
+    { d:'Jun 01', m:'Salary Credit', cat:'Income', acc:'HDFC Bank', amt:535000, ic:'💰' },
+  ]; }
+  milestoneDefs(){ return [
+    { amt:2500000, name:'First ₹25L', tag:'' },
+    { amt:3500000, name:'₹35 Lakh', tag:'' },
+    { amt:5000000, name:'Half a crore', tag:'Liquid' },
+    { amt:7500000, name:'₹75 Lakh', tag:'' },
+    { amt:8300000, name:'$100K club', tag:'≈ $100,000' },
+    { amt:10000000, name:'Crorepati', tag:'₹1 Crore' },
+    { amt:20000000, name:'2 Crore', tag:'' },
+    { amt:50000000, name:'5 Crore', tag:'' },
+    { amt:83000000, name:'Millionaire', tag:'≈ $1,000,000' },
+    { amt:100000000, name:'10 Crore', tag:'' },
+  ]; }
+
+  // ---------- derived ----------
+  net(){ return { cash:310000, fd:1400000, rd:120000, mf:1680000, us:155000, ind:65000 }; }
+  total(){ const n=this.net(); return n.cash+n.fd+n.rd+n.mf+n.us+n.ind; }
+  nwSeries(){ return [18.2,20.1,22.4,24.9,27.0,28.6,31.2,35.9,34.0,35.5,36.4,37.3].map(x=>x*100000); }
+  nwLabels(){ return ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun']; }
+
+  // ---------- nav ----------
+  go(tab){ this.setState({ tab, overlay:null, sheet:null }); }
+  open(overlay, catId){ this.setState({ overlay, catId: catId||null }); }
+  back(){ this.setState({ overlay:null }); }
+  toggleGlass(){ this.setState(s=>({ glassStyle: s.glassStyle==='clear'?'frosted':'clear' })); this.toast(this.state.glassStyle==='clear'?'Frosted glass':'Clear glass'); }
+  openSettings(){ this.setState({ sheet:'settings' }); }
+  setDisplayCcy(c){ this.setState({ displayCcy:c }); if(c==='INR') this.toast('Showing Indian Rupee'); }
+  setCcyMode(m){ this.setState({ ccyMode:m }); this.toast(m==='convert'?'Converting at live rate':'Symbol-only switch'); }
+  setRange(r){ this.setState({ nwRange:r }); }
+  toast(t){ this.setState({ toast:t }); clearTimeout(this._tt); this._tt=setTimeout(()=>this.setState({toast:null}), 1800); }
+
+  // ---------- goals ----------
+  cycleGoal(id){ const order=['active','done','postponed','failed']; this.setState(s=>({ goals: s.goals.map(g=> g.id===id ? {...g, status: order[(order.indexOf(g.status)+1)%order.length]} : g) })); const g=this.state.goals.find(x=>x.id===id); }
+  openGoalEditor(g){ this.setState({ sheet:'goal', editingGoal: g? g.id:null, draft: g? {title:g.title,icon:g.icon,target:String(g.target),monthly:String(g.monthly),deadline:g.deadline} : {title:'',icon:'target',target:'',monthly:'',deadline:''} }); }
+  setDraft(k,v){ this.setState(s=>({ draft:{...s.draft, [k]:v} })); }
+  saveGoal(){ const d=this.state.draft; if(!d.title.trim()){ this.toast('Add a title'); return; } const t=parseInt(String(d.target).replace(/\D/g,''))||0; const mo=parseInt(String(d.monthly).replace(/\D/g,''))||0; if(this.state.editingGoal){ this.setState(s=>({ goals:s.goals.map(g=> g.id===s.editingGoal? {...g,title:d.title,icon:d.icon,target:t,monthly:mo,deadline:d.deadline||g.deadline}:g), sheet:null })); this.toast('Goal updated'); } else { const ng={ id:'g'+Date.now(), title:d.title, icon:d.icon||'target', target:t, saved:0, monthly:mo, deadline:d.deadline||'2027', status:'active' }; this.setState(s=>({ goals:[...s.goals, ng], sheet:null })); this.toast('Goal created · +50 XP'); } }
+  closeSheet(){ this.setState({ sheet:null }); }
+  pickIcon(ic){ this.setDraft('icon', ic); }
+
+  // ---------- upload ----------
+  startUpload(src){ this.setState({ overlay:'upload', upload:{ step: src?1:0, source:src||null, file:null, password:'', shake:false, parsedCount:0 } }); }
+  uSource(src){ this.setState(s=>({ upload:{...s.upload, source:src, step:1 } })); }
+  uPick(){ const f = (this.state.upload.source||'HDFC')+'_Statement_Jun2026.pdf'; this.setState(s=>({ upload:{...s.upload, file:f, step:2 } })); }
+  uPass(v){ this.setState(s=>({ upload:{...s.upload, password:v, shake:false } })); }
+  uUnlock(){ const p=this.state.upload.password; if(!p || p.length<4){ this.setState(s=>({ upload:{...s.upload, shake:true } })); return; } this.setState(s=>({ upload:{...s.upload, step:3 } })); setTimeout(()=>{ this.setState(s=>({ upload:{...s.upload, step:4, parsedCount:16 } })); }, 2100); }
+  uImport(){ this.setState(s=>({ upload:{...s.upload, step:5 } })); this.toast('16 transactions imported · +120 XP'); }
+
+  // ---------- income & tax ----------
+  toggleTaxPaid(id){ this.setState(s=>{ const has=s.taxPaidIds.includes(id); this.toast(has?'Marked unpaid':'Marked paid'); return { taxPaidIds: has? s.taxPaidIds.filter(x=>x!==id) : [...s.taxPaidIds, id] }; }); }
+  incToINR(amount,ccy){ const r={INR:1,USD:83.4,SAR:22.2,QAR:22.9}; return amount*(r[ccy]||1); }
+  fmtNative(amount,ccy){ const sym={INR:'₹',USD:'$',SAR:'﷼',QAR:'ر.ق'}[ccy]||''; amount=Math.round(amount); let s; if(ccy==='INR'){ let x=String(amount); let l3=x.slice(-3); let rest=x.slice(0,-3); if(rest)l3=','+l3; rest=rest.replace(/\B(?=(\d{2})+(?!\d))/g,','); s=rest+l3; } else { s=String(amount).replace(/\B(?=(\d{3})+(?!\d))/g,','); } return sym+s; }
+  openIncEditor(src){ this.setState({ sheet:'income', incDraft: src? {open:true,id:src.id,name:src.name,kind:src.kind,amount:String(src.amount),ccy:src.ccy} : {open:true,id:null,name:'',kind:'Contract',amount:'',ccy:'INR'} }); }
+  setIncField(k,v){ this.setState(s=>({ incDraft:{...s.incDraft, [k]:v} })); }
+  saveIncome(){ const d=this.state.incDraft; if(!d.name.trim()){ this.toast('Add a name'); return; } const amt=parseInt(String(d.amount).replace(/\D/g,''))||0; if(!amt){ this.toast('Enter an amount'); return; } if(d.id){ this.setState(s=>({ incomeSources:s.incomeSources.map(x=>x.id===d.id?{...x,name:d.name,kind:d.kind,amount:amt,ccy:d.ccy}:x), sheet:null })); this.toast('Source updated'); } else { const palette=['#5B7FB8','#4FA06B','#9576C0','#C98A2B','#3FA3A3','#C56B6B']; const ns={ id:'src'+Date.now(), name:d.name, kind:d.kind, amount:amt, ccy:d.ccy, c:palette[this.state.incomeSources.length%palette.length] }; this.setState(s=>({ incomeSources:[...s.incomeSources, ns], sheet:null })); this.toast('Source added'); } }
+  delIncome(){ const id=this.state.incDraft.id; if(!id) return; this.setState(s=>({ incomeSources:s.incomeSources.filter(x=>x.id!==id), sheet:null })); this.toast('Source removed'); }
+  incomeTaxVM(){
+    const sources=this.state.incomeSources.map(s=>({ ...s, total:this.incToINR(s.amount,s.ccy) }));
+    const months=[
+      { m:'Apr', ops:130000, aiir:0,      lga:0,      aka:0 },
+      { m:'May', ops:0,      aiir:70500,  lga:0,      aka:0 },
+      { m:'Jun', ops:0,      aiir:237359, lga:0,      aka:0 },
+      { m:'Jul', ops:0,      aiir:0,      lga:0,      aka:0 },
+      { m:'Aug', ops:0,      aiir:0,      lga:0,      aka:514500 },
+      { m:'Sep', ops:0,      aiir:0,      lga:0,      aka:523882 },
+      { m:'Oct', ops:0,      aiir:0,      lga:0,      aka:527186 },
+      { m:'Nov', ops:0,      aiir:0,      lga:0,      aka:527382 },
+      { m:'Dec', ops:0,      aiir:0,      lga:263695, aka:535758 },
+      { m:'Jan', ops:0,      aiir:0,      lga:264914, aka:536114 },
+      { m:'Feb', ops:0,      aiir:0,      lga:270715, aka:537831 },
+      { m:'Mar', ops:0,      aiir:626710, lga:0,      aka:548529 },
+    ];
+    const salary=sources.filter(s=>s.kind==='Salary').reduce((a,s)=>a+s.total,0);
+    const contract=sources.filter(s=>s.kind==='Contract').reduce((a,s)=>a+s.total,0);
+    const totalIncome=salary+contract;
+    const taxableContract=contract/2;
+    const taxable=salary+taxableContract;
+    const taxTill=300000;
+    const remaining=Math.max(0,(taxable-2400000))*0.3;
+    const baseTax=taxTill+remaining;
+    const cess=baseTax*0.04;
+    const advanceTax=baseTax+cess;
+
+    const defs=[
+      {id:'t1', n:'1st instalment', pctL:'15%',  due:'15 Jun 2025', cum:0.15, dueMs:Date.parse('2025-06-15')},
+      {id:'t2', n:'2nd instalment', pctL:'45%',  due:'15 Sep 2025', cum:0.45, dueMs:Date.parse('2025-09-15')},
+      {id:'t3', n:'3rd instalment', pctL:'75%',  due:'15 Dec 2025', cum:0.75, dueMs:Date.parse('2025-12-15')},
+      {id:'t4', n:'4th instalment', pctL:'100%', due:'15 Mar 2026', cum:1.00, dueMs:Date.parse('2026-03-15')},
+    ];
+    const paidIds=this.state.taxPaidIds, now=Date.parse('2026-06-21');
+    let prev=0;
+    const taxInst=defs.map(d=>{
+      const cumAmt=Math.round(advanceTax*d.cum); const amt=cumAmt-prev; prev=cumAmt;
+      const paid=paidIds.includes(d.id); const overdue=!paid && d.dueMs<now;
+      return { id:d.id, n:d.n, pctL:d.pctL, due:d.due, amt, amtF:this.fmtINR(amt), paid,
+        status: paid?'Paid':(overdue?'Overdue':'Upcoming'),
+        statusC: paid?'var(--pos)':(overdue?'var(--neg)':'var(--ink2)'),
+        dot: paid?'var(--pos)':(overdue?'var(--neg)':'rgba(120,110,90,.3)'),
+        onToggle:()=>this.toggleTaxPaid(d.id) };
+    });
+    const paidTotal=taxInst.filter(t=>t.paid).reduce((a,t)=>a+t.amt,0);
+    const pending=advanceTax-paidTotal;
+    const paidPct=advanceTax? paidTotal/advanceTax*100:0;
+    const daysToFile=Math.max(0,Math.round((Date.parse('2026-07-31')-now)/86400000));
+
+    const incSources=sources.map(s=>({ ...s, totalF:this.fmtINR(s.total), nativeF:this.fmtNative(s.amount,s.ccy), showNative:s.ccy!=='INR', ccyTag:s.ccy, w:(s.total/totalIncome*100).toFixed(1)+'%', pctL:Math.round(s.total/totalIncome*100)+'%', onEdit:()=>this.openIncEditor(s) }));
+    const mt=months.map(m=>({ m:m.m, total:m.ops+m.aiir+m.lga+m.aka }));
+    const maxM=Math.max(...mt.map(x=>x.total));
+    const incMonths=mt.map(x=>({ m:x.m, h:(x.total/maxM*100).toFixed(0)+'%', zero:x.total===0,
+      totalF: x.total>=100000? '₹'+(x.total/100000).toFixed(1)+'L' : (x.total>0?'₹'+Math.round(x.total/1000)+'k':'—') }));
+
+    return {
+      taxTotalF:this.fmtINR(Math.round(advanceTax)), taxPaidF:this.fmtINR(paidTotal), taxPendingF:this.fmtINR(Math.round(pending)),
+      taxPaidPct:paidPct.toFixed(0), taxPaidW:Math.min(100,paidPct).toFixed(1)+'%', taxInst,
+      salaryF:this.fmtINR(salary), contractF:this.fmtINR(contract), presumptiveF:this.fmtINR(Math.round(taxableContract)),
+      taxableF:this.fmtINR(Math.round(taxable)), taxTillF:this.fmtINR(taxTill), taxTill30F:this.fmtINR(Math.round(remaining)),
+      taxCessF:this.fmtINR(Math.round(cess)), totalIncomeF:this.fmtINR(totalIncome), totalIncomeC:this.fmtC(totalIncome),
+      incSources, incMonths, daysToFile, filingDue:'31 Jul 2026',
+    };
+  }
+
+  renderVals(){
+    const S=this.state;
+    const itv=this.incomeTaxVM();
+    const glass = S.glassStyle==='clear'
+      ? '--g-bg:rgba(255,255,255,0.46);--g-bg2:rgba(255,255,255,0.30);--g-blur:blur(22px) saturate(180%);--g-bd:rgba(255,255,255,0.66);--g-sh:0 8px 30px rgba(70,52,16,0.10);'
+      : '--g-bg:rgba(255,255,255,0.76);--g-bg2:rgba(255,255,255,0.60);--g-blur:blur(40px) saturate(150%);--g-bd:rgba(255,255,255,0.92);--g-sh:0 10px 34px rgba(70,52,16,0.08);';
+    const themeStyle = glass + '--accent:#F5A623;--accent2:#E07B00;--pos:#1FA855;--neg:#E5484D;--ink:#1c1c1e;--ink2:#5f5f66;--ink3:#9a9aa1;--sheet-bg:rgba(244,239,229,0.78);--sheet-solid:#f4efe5;';
+
+    const total=this.total(), n=this.net();
+    const target=5000000, toTargetPct=Math.min(100, total/target*100);
+
+    // net worth chart
+    let series=this.nwSeries(), labels=this.nwLabels();
+    const r=S.nwRange; if(r==='1M'){ series=series.slice(-2); labels=labels.slice(-2);} else if(r==='6M'){ series=series.slice(-6); labels=labels.slice(-6);} 
+    const W=312,H=128,pad=8;
+    const min=Math.min(...series)*0.94, max=Math.max(...series)*1.03;
+    const xs=i=> pad + i*(W-2*pad)/Math.max(1,series.length-1);
+    const ys=v=> H-pad - (v-min)/(max-min)*(H-2*pad);
+    const nwLine=series.map((v,i)=>xs(i).toFixed(1)+','+ys(v).toFixed(1)).join(' ');
+    const nwArea='M '+xs(0).toFixed(1)+','+H+' L '+series.map((v,i)=>xs(i).toFixed(1)+','+ys(v).toFixed(1)).join(' L ')+' L '+xs(series.length-1).toFixed(1)+','+H+' Z';
+    const lastCx=xs(series.length-1).toFixed(1), lastCy=ys(series[series.length-1]).toFixed(1);
+    const nwChange=series[series.length-1]-series[series.length-2];
+
+    // breakdown
+    const liquidCash=n.cash, deposits=n.fd+n.rd, equity=n.mf+n.us+n.ind;
+    const seg=[ {label:'Equity', val:equity, c:'#F5A623'}, {label:'Deposits', val:deposits, c:'#5B8DEF'}, {label:'Cash', val:liquidCash, c:'#34C759'} ]
+      .map(x=>({ ...x, pct:(x.val/total*100), w:(x.val/total*100).toFixed(1)+'%', valF:this.fmtC(x.val) }));
+
+    // plan
+    const cats=this.planCats().map(c=>{ const pct=c.spent/c.plan*100; const over=c.spent>c.plan; return { ...c, pct, over, w:Math.min(100,pct).toFixed(0)+'%', barC: over?'var(--neg)':c.c, iconEl:this.icon(c.icon,20,c.c), spentF:this.fmtINR(c.spent), planF:this.fmtINR(c.plan), leftF:this.fmtINR(Math.abs(c.plan-c.spent)), leftLbl: over?'over':'left', pctLbl:Math.round(pct)+'%', onOpen:()=>this.open('category', c.id) }; });
+    const planTotal=cats.reduce((a,c)=>a+c.plan,0), spentTotal=cats.reduce((a,c)=>a+c.spent,0);
+    const planPct=Math.round(spentTotal/planTotal*100);
+    const top3=cats.slice(0,3);
+
+    // accounts
+    const banks=[...this.banks(), ...S.banksAdded].map(b=>({ ...b, balF:this.fmtINR(b.bal) }));
+    const cards=this.cards().map(c=>({ ...c, outF:this.fmtINR(c.out), limitF:this.fmtC(c.limit), util:Math.round(c.out/c.limit*100), w:Math.round(c.out/c.limit*100)+'%' }));
+    const dv=this.depositsVM();
+    const depDraftVM=(()=>{ const D=S.depDraft; return { isFD:D.kind==='FD', segs:[{k:'FD',l:'Fixed Deposit'},{k:'RD',l:'Recurring'}].map(x=>({ ...x, on:D.kind===x.k, bg:D.kind===x.k?'var(--accent)':'var(--g-bg)', col:D.kind===x.k?'#fff':'var(--ink2)', onTap:()=>this.setDepKind(x.k) })), banks:['HDFC','Axis','Federal','ICICI','SBI'].map(b=>({ b, on:D.bank===b, bg:D.bank===b?'rgba(245,166,35,.16)':'var(--g-bg)', bd:D.bank===b?'var(--accent)':'var(--g-bd)', onTap:()=>this.setDepField('bank',b) })), amount:D.amount, rate:D.rate, months:D.months, amtLabel:D.kind==='FD'?'Principal ₹':'Monthly ₹' }; })();
+    const invIconMap={ 'Mutual Funds':'mf','US Stocks':'us','India Stocks':'india' };
+    const invs=this.invs().map(i=>({ ...i, balF:this.fmtINR(i.bal), gainF:'+'+this.fmtC(i.gain), gpctF:'+'+i.gpct+'%', iconEl:this.icon(invIconMap[i.name]||'india',20,'var(--ink)') }));
+    const banksTotal=banks.reduce((a,b)=>a+b.bal,0);
+    const cardsTotal=cards.reduce((a,b)=>a+b.out,0);
+
+    // transactions
+    const txns=this.txns().map(t=>({ ...t, income:t.amt>0, amtF:(t.amt>0?'+':'')+this.fmtINR(t.amt), col:t.amt>0?'var(--pos)':'var(--ink)', iconEl:this.icon(this.txnIconName(t),18,'var(--ink2)') }));
+    const recent=txns.slice(0,4);
+
+    // milestones
+    const statusMap={ active:{l:'On track',c:'var(--accent)'}, done:{l:'Achieved',c:'var(--pos)'}, postponed:{l:'Postponed',c:'#8A8A8F'}, failed:{l:'Missed',c:'var(--neg)'} };
+    const ms=this.milestoneDefs().map(m=>{ const done=total>=m.amt; const pct=Math.min(100,total/m.amt*100); const active=!done && total>=m.amt*0.55 && this.milestoneDefs().filter(x=>!(total>=x.amt)).indexOf(m)===0; return { ...m, done, active, pct:pct.toFixed(0)+'%', amtF:this.fmtC(m.amt), state: done?'done':(active?'active':'locked'), ring: done?'var(--pos)':(active?'var(--accent)':'rgba(120,110,90,.25)'), iconEl: this.icon(done?'check':(active?'mountain':'lock'), done?16:18, done?'var(--pos)':(active?'var(--accent2)':'var(--ink3)')) }; });
+
+    // goals
+    const goals=S.goals.map(g=>{ const pct=g.target? Math.min(100,g.saved/g.target*100):0; const st=statusMap[g.status]; return { ...g, pct, w:pct.toFixed(0)+'%', pctLbl:Math.round(pct)+'%', iconEl:this.icon(g.icon,22,'var(--accent2)'), iconElSm:this.icon(g.icon,18,'var(--ink2)'), savedF:this.fmtC(g.saved), targetF:this.fmtC(g.target), monthlyF: g.monthly?this.fmtINR(g.monthly)+'/mo':'—', statusLbl:st.l, statusC:st.c, dim: g.status==='done'||g.status==='postponed'||g.status==='failed', onCycle:()=>this.cycleGoal(g.id), onEdit:()=>this.openGoalEditor(g) }; });
+    const activeGoals=goals.filter(g=>g.status==='active');
+    const doneCount=S.goals.filter(g=>g.status==='done').length;
+
+    // category detail
+    const curCat=this.planCats().find(c=>c.id===S.catId);
+    let catView=null;
+    if(curCat){ const items=this.catItems(S.catId).map(it=>({ name:it[0], amtF:this.fmtINR(it[1]), acc:it[2] })); const pct=curCat.spent/curCat.plan*100; const over=curCat.spent>curCat.plan; catView={ name:curCat.name, icon:curCat.icon, iconEl:this.icon(curCat.icon,24,curCat.c), c:curCat.c, items, spentF:this.fmtINR(curCat.spent), planF:this.fmtINR(curCat.plan), w:Math.min(100,pct).toFixed(0)+'%', pctLbl:Math.round(pct)+'%', barC:over?'var(--neg)':curCat.c, leftF:this.fmtINR(Math.abs(curCat.plan-curCat.spent)), leftLbl:over?'over budget':'remaining', overC:over?'var(--neg)':'var(--pos)' }; }
+
+    // badges
+    const badges=[ {ic:'shield',l:'Safety Net',on:true}, {ic:'check',l:'Loan Slayer',on:true}, {ic:'flame',l:'8-mo Streak',on:true}, {ic:'investments',l:'+20% MF',on:true}, {ic:'mountain',l:'₹50L',on:false}, {ic:'trophy',l:'Crorepati',on:false} ];
+
+    // upload
+    const U=S.upload;
+    const sources=[ {id:'HDFC',name:'HDFC Bank',sub:'Savings · ••4821',c:'#004C8F'}, {id:'AXIS',name:'Axis Bank',sub:'Savings · ••9032',c:'#97144D'}, {id:'FED',name:'Federal Bank',sub:'Savings · ••7741',c:'#F2A900'}, {id:'INFINIA',name:'HDFC Infinia',sub:'Credit · ••6012',c:'#1a1a1a'} ];
+    const parsedPreview=this.txns().slice(0,6).map(t=>({ ...t, amtF:(t.amt>0?'+':'')+this.fmtINR(t.amt), col:t.amt>0?'var(--pos)':'var(--ink)', iconEl:this.icon(this.txnIconName(t),18,'var(--ink2)') }));
+
+    // --- plan adherence: month by month ---
+    const monthsRaw=[ {m:'Jan',s:268000},{m:'Feb',s:291000},{m:'Mar',s:255000},{m:'Apr',s:279000},{m:'May',s:262000},{m:'Jun',s:spentTotal} ];
+    const months=monthsRaw.map(x=>{ const ratio=x.s/planTotal; const over=x.s>planTotal; return { m:x.m, h:Math.min(100,ratio*100).toFixed(0)+'%', over, c:over?'var(--neg)':'var(--accent)', pctLbl:Math.round(ratio*100)+'%' }; });
+
+    // --- goals split & badges ---
+    const otherGoals=goals.filter(g=>g.status!=='active');
+    const badges2=badges.map(b=>({ ...b, op:b.on?'1':'.4', iconEl:this.icon(b.ic,24, b.on?'var(--accent2)':'var(--ink3)') }));
+
+    // --- accounts decoration ---
+    const cards2=cards.map(c=>({ ...c, utilC: c.util>70?'var(--neg)':(c.util>40?'var(--accent)':'var(--pos)'), iconEl:this.icon('card',20,'var(--ink)') }));
+    const invs2=invs;
+
+    // --- transaction filters ---
+    const txnFilters=[ {l:'All',on:true},{l:'Income',on:false},{l:'Needs',on:false},{l:'Wants',on:false},{l:'Investments',on:false} ].map(f=>({ ...f, bg:f.on?'var(--accent)':'var(--g-bg)', col:f.on?'#fff':'var(--ink2)' }));
+
+    // --- upload flow decoration ---
+    const uSrc2=sources.map(s=>({ ...s, tag:s.id, onPick:()=>this.uSource(s.id) }));
+    const uSourceName=(sources.find(s=>s.id===U.source)||{}).name||'Account';
+    const upc=k=> U.step>=k?'var(--accent)':'rgba(120,110,90,.2)';
+
+    // --- goal editor icon options ---
+    const iconOpts=['target','mountain','home','car','ring','grad','plane','book','shield','coins','plant','gift'].map(e=>({ e, onPick:()=>this.pickIcon(e), iconEl:this.icon(e,20, S.draft.icon===e?'#fff':'var(--ink2)'), bg: S.draft.icon===e?'var(--accent)':'var(--g-bg2)', bd: S.draft.icon===e?'var(--accent)':'var(--g-bd)' }));
+
+    // --- holdings ---
+    const hv=this.holdingsVM();
+    const A=S.addH;
+    const addMarkets=[ {m:'IN',l:'India'},{m:'US',l:'US'},{m:'MF',l:'Funds'} ].map(x=>({ ...x, on:A.market===x.m, bg:A.market===x.m?'var(--accent)':'var(--g-bg)', col:A.market===x.m?'#fff':'var(--ink2)', onTap:()=>this.setAddHMarket(x.m) }));
+    const instruments=this.catalog()[A.market].map(x=>({ sym:x.sym, name:x.name, priceLbl:this.fmtPrice(this.livePx(x.sym),A.market), sel:A.sym===x.sym, onPick:()=>this.pickInstrument(x.sym), bg:A.sym===x.sym?'rgba(245,166,35,.14)':'var(--g-bg)', bd:A.sym===x.sym?'var(--accent)':'var(--g-bd)', chk:A.sym===x.sym }));
+    const addSel=A.sym? this.catItem(A.sym):null;
+
+    // --- connect ---
+    const C=S.connect;
+    const connectBanks=this.bankDirectory().map(b=>({ ...b, onPick:()=>this.pickConnectBank(b.id) }));
+
+    // --- income editor ---
+    const ID=S.incDraft;
+    const incKinds=[ {k:'Salary'},{k:'Contract'} ].map(x=>({ ...x, on:ID.kind===x.k, bg:ID.kind===x.k?'var(--accent)':'var(--g-bg)', col:ID.kind===x.k?'#fff':'var(--ink2)', onTap:()=>this.setIncField('kind',x.k) }));
+    const incCcys=['INR','USD','SAR','QAR'].map(c=>({ c, on:ID.ccy===c, bg:ID.ccy===c?'var(--accent)':'var(--g-bg)', col:ID.ccy===c?'#fff':'var(--ink2)', onTap:()=>this.setIncField('ccy',c) }));
+
+    // --- settings / display currency ---
+    const ccyMeta={ INR:{sym:'₹',name:'Indian Rupee'}, USD:{sym:'$',name:'US Dollar'}, SAR:{sym:'﷼',name:'Saudi Riyal'}, QAR:{sym:'ر.ق',name:'Qatari Riyal'} };
+    const dispCcys=['INR','USD','SAR','QAR'].map(c=>({ c, sym:ccyMeta[c].sym, name:ccyMeta[c].name, on:S.displayCcy===c, bg:S.displayCcy===c?'rgba(245,166,35,.14)':'var(--g-bg)', bd:S.displayCcy===c?'var(--accent)':'var(--g-bd)', onTap:()=>this.setDisplayCcy(c) }));
+    const modeOpts=[ {m:'convert',l:'Convert at live rate',sub:'Recalculate every value using today\u2019s FX'},{m:'relabel',l:'Keep values, swap symbol',sub:'Numbers unchanged, only the currency sign flips'} ].map(x=>({ ...x, on:S.ccyMode===x.m, bd:S.ccyMode===x.m?'var(--accent)':'var(--g-bd)', dot:S.ccyMode===x.m?'var(--accent)':'rgba(120,110,90,.3)', onTap:()=>this.setCcyMode(x.m) }));
+
+    return {
+      ...itv,
+      icBolt:this.icon('bolt',17,'var(--accent2)'), icFlame:this.icon('flame',26,'var(--accent2)'), icTrophy:this.icon('trophy',14,'var(--accent2)'),
+      icDoc:this.icon('doc',21,'#fff'), icDocSm:this.icon('doc',18,'#fff'), icGear:this.icon('gear',20,'var(--ink)'), icPlus:this.icon('plus',17,'#fff'), icPlusDark:this.icon('plus',18,'var(--accent2)'), icChevR:this.icon('chevR',18,'var(--ink3)'),
+      icMountainSm:this.icon('mountain',13,'var(--ink2)'), icLock:this.icon('lock',17,'#fff'), icCheckBig:this.icon('checkCircle',26,'var(--pos)'), icDocBig:this.icon('doc',40,'var(--accent2)'),
+      icSpark:this.icon('sparkle',40,'var(--pos)'), icLink:this.icon('link',20,'#fff'), icShieldCheck:this.icon('shield2',20,'var(--pos)'), icBoltBig:this.icon('bolt',26,'#fff'),
+      icAlarm:this.icon('clock',20,'#fff'), icTaxCheck:this.icon('check',13,'var(--pos)'),
+      themeStyle, glassLabel: S.glassStyle==='clear'?'Clear':'Frosted', toggleGlass:()=>this.toggleGlass(),
+      tab:S.tab, isHome:S.tab==='home', isPlan:S.tab==='plan', isGoals:S.tab==='goals', isNet:S.tab==='net', isAcc:S.tab==='accounts', isIncome:S.tab==='income',
+      homeCol:S.tab==='home'?'#E07B00':'#9a9aa1', planCol:S.tab==='plan'?'#E07B00':'#9a9aa1', goalsCol:S.tab==='goals'?'#E07B00':'#9a9aa1', netCol:S.tab==='net'?'#E07B00':'#9a9aa1', accCol:S.tab==='accounts'?'#E07B00':'#9a9aa1', incomeCol:S.tab==='income'?'#E07B00':'#9a9aa1',
+      goHome:()=>this.go('home'), goPlan:()=>this.go('plan'), goGoals:()=>this.go('goals'), goNet:()=>this.go('net'), goAcc:()=>this.go('accounts'), goIncome:()=>this.go('income'),
+      openTxns:()=>this.open('txns'), openUpload:()=>this.startUpload(null), back:()=>this.back(),
+      overlayTxns:S.overlay==='txns', overlayCat:S.overlay==='category', overlayUpload:S.overlay==='upload', overlayHoldings:S.overlay==='holdings',
+      sheetGoal:S.sheet==='goal', sheetAddH:S.sheet==='addH',
+      ...hv, openHoldings:()=>this.openHoldings(), openAddH:()=>this.openAddH(), saveHolding:()=>this.saveHolding(),
+      addMarkets, instruments, addSelName: addSel?addSel.name:null, hasAddSel:!!addSel,
+      addQty:A.qty, addPrice:A.price, addDate:A.date,
+      onAddQty:(e)=>this.setAddHField('qty',e.target.value), onAddPrice:(e)=>this.setAddHField('price',e.target.value), onAddDate:(e)=>this.setAddHField('date',e.target.value),
+      icCoins:this.icon('coins',20,'var(--ink)'), icChart:this.icon('investments',18,'var(--accent2)'),
+      icLinkDark:this.icon('link',18,'#fff'), icShieldCheck2:this.icon('shield2',44,'var(--pos)'), icGearBtn:this.icon('gear',18,'var(--ink)'),
+      sheetIncome:S.sheet==='income', openIncAdd:()=>this.openIncEditor(null), saveIncome:()=>this.saveIncome(), delIncome:()=>this.delIncome(), incEditing:!!ID.id,
+      incKinds, incCcys, incName:ID.name, incAmount:ID.amount, incCcy:ID.ccy, incSheetTitle: ID.id?'Edit source':'Add income source',
+      onIncName:(e)=>this.setIncField('name',e.target.value), onIncAmount:(e)=>this.setIncField('amount',e.target.value),
+      sheetSettings:S.sheet==='settings', openSettings:()=>this.openSettings(), dispCcys, modeOpts, showModePick:S.displayCcy!=='INR',
+      glassIsClear:S.glassStyle==='clear', dispCcyCode:S.displayCcy,
+      sheetConnect:S.sheet==='connect', openConnect:()=>this.openConnect(), connectApprove:()=>this.connectApprove(), connectFinish:()=>this.connectFinish(),
+      connectBanks, cStep:C.step, cStep0:C.step===0, cStep1:C.step===1, cStep2:C.step===2, cStep3:C.step===3,
+      cBankName:C.bank?C.bank.name:'', cBankLogo:C.bank?C.bank.logo:'', cBankC:C.bank?C.bank.c:'#888',
+      toast:S.toast, hasToast:!!S.toast,
+
+      totalF:this.fmtINR(total), totalC:this.fmtC(total), target:'₹50L', toTargetPct:toTargetPct.toFixed(0), toTargetW:toTargetPct.toFixed(1)+'%', toGoF:this.fmtC(target-total),
+      nwChangeF:(nwChange>=0?'+':'−')+this.fmtC(Math.abs(nwChange)), nwUp:nwChange>=0, nwChangePct:((nwChange/(series[series.length-2]))*100).toFixed(1),
+      nwLine, nwArea, lastCx, lastCy, range:S.nwRange,
+      setR1:()=>this.setRange('1M'), setR6:()=>this.setRange('6M'), setR1Y:()=>this.setRange('1Y'), setRAll:()=>this.setRange('All'),
+      seg, cashF:this.fmtC(liquidCash), depF:this.fmtC(deposits), eqF:this.fmtC(equity),
+      cats, top3, planTotalF:this.fmtINR(planTotal), spentTotalF:this.fmtINR(spentTotal), planPct, planLeftF:this.fmtINR(planTotal-spentTotal), planW:Math.min(100,spentTotal/planTotal*100).toFixed(0)+'%',
+      banks, cards:cards2, deposits:dv.depList, invs:invs2, banksTotalF:this.fmtINR(banksTotal), cardsTotalF:this.fmtINR(cardsTotal), eqTotalF:this.fmtC(equity), depTotalF:dv.depTotalCurF,
+      sheetDeposit:S.sheet==='deposit', openDeposit:()=>this.openDeposit(), saveDeposit:()=>this.saveDeposit(),
+      depSegs:depDraftVM.segs, depBanks:depDraftVM.banks, depIsFD:depDraftVM.isFD, depAmount:depDraftVM.amount, depRate:depDraftVM.rate, depMonths:depDraftVM.months, depAmtLabel:depDraftVM.amtLabel,
+      onDepAmount:(e)=>this.setDepField('amount',e.target.value), onDepRate:(e)=>this.setDepField('rate',e.target.value), onDepMonths:(e)=>this.setDepField('months',e.target.value),
+      txns, recent, incomeF:this.fmtINR(535000), txnFilters, months,
+      ms, goals, activeGoals, otherGoals, doneCount, badges:badges2,
+      addGoal:()=>this.openGoalEditor(null),
+      catView, catBack:()=>this.back(),
+      // upload
+      uStep:U.step, uStep0:U.step===0, uStep1:U.step===1, uStep2:U.step===2, uStep3:U.step===3, uStep4:U.step===4, uStep5:U.step===5,
+      uSources:uSrc2, uSource:U.source, uSourceName, uFile:U.file, uPassword:U.password, uShake:U.shake, uParsedPreview:parsedPreview, uParsedCount:U.parsedCount,
+      up1c:upc(1), up2c:upc(2), up3c:upc(3), up4c:upc(4), uShakeAnim:(U.shake?'shakeX .4s ease':'none'), uPassBd:(U.shake?'var(--neg)':'var(--g-bd)'),
+      pickSource:(id)=>this.uSource(id), pickFile:()=>this.uPick(), onPass:(e)=>this.uPass(e.target.value), unlock:()=>this.uUnlock(), importTxns:()=>this.uImport(),
+      // sheet
+      draft:S.draft, editing:!!S.editingGoal, draftTitle:S.draft.title, draftIcon:S.draft.icon, draftTarget:S.draft.target, draftMonthly:S.draft.monthly, draftDeadline:S.draft.deadline,
+      onDTitle:(e)=>this.setDraft('title',e.target.value), onDTarget:(e)=>this.setDraft('target',e.target.value), onDMonthly:(e)=>this.setDraft('monthly',e.target.value), onDDeadline:(e)=>this.setDraft('deadline',e.target.value),
+      iconChoices:['🎯','🏔️','🏠','🚗','💍','🎓','✈️','📚','🛡️','💰','🌱','🎁'], pickIcon:(ic)=>this.pickIcon(ic),
+      iconOpts, sheetTitle:(!!S.editingGoal?'Edit goal':'New goal'), saveLabel:(!!S.editingGoal?'Save changes':'Create goal · +50 XP'),
+      saveGoal:()=>this.saveGoal(), closeSheet:()=>this.closeSheet(),
+    };
+  }
+}
+</script>
+</body>
+</html>

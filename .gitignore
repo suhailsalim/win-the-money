@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# OpenWolf — local project-intelligence + token ledger (regenerate with `openwolf init`)
+.wolf/
+
+# Claude Code — local hooks/settings (OpenWolf re-registers these on `openwolf init`)
+.claude/
+
+# Local tooling / scratch
+/tmp/
+*.log

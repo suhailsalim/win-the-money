@@ -1,0 +1,256 @@
+import SwiftUI
+
+// MARK: - Tabs
+enum Tab: String, CaseIterable, Identifiable {
+    case home, plan, insights, goals, wealth, income
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .home: return "Home"
+        case .plan: return "Plan"
+        case .insights: return "Insights"
+        case .goals: return "Goals"
+        case .wealth: return "Wealth"
+        case .income: return "Income"
+        }
+    }
+}
+
+// MARK: - Category (budget)
+struct BudgetCategory: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String
+    var symbol: String        // SF Symbol
+    var spent: Double
+    var plan: Double
+    var color: String         // hex for icon tint
+    var isSystem: Bool = false // a maintained base category — can't be deleted/renamed
+
+    var pct: Double { plan > 0 ? spent / plan : 0 }
+    var left: Double { plan - spent }
+    var over: Bool { spent > plan }
+    // zen: slate caution (not red), calm blue near-limit, sage green ok
+    var barColorHex: String { over ? "9AA7BE" : (pct > 0.85 ? "6E9BD8" : "7FC4A3") }
+}
+
+// MARK: - Transaction
+enum TxnSource: String, Codable { case bank, card, unknown }
+
+struct Txn: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var merchant: String
+    var symbol: String
+    var category: String
+    var account: String
+    var amount: Double        // negative = spend, positive = income
+    var date: Date
+    var externalId: String? = nil   // stable id from the bank/AA feed, for dedup
+    var source: TxnSource = .unknown
+    var counterparty: String? = nil // VPA / payee / account — key for recurring + rules
+    var statementId: String? = nil  // set once confirmed/enriched by a statement (prevents re-match)
+    var tags: [String] = []         // facet labels (Entertainment, Tech, …) + "Refund"
+    var transfer: Bool = false      // CC bill payment / self-transfer — excluded from spend & income
+    var income: Bool { amount > 0 }
+    var isRefund: Bool { tags.contains("Refund") }
+}
+
+// MARK: - Bank account
+struct BankAccount: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String
+    var logo: String          // short monogram e.g. HDFC
+    var colorHex: String
+    var type: String
+    var mask: String
+    var balance: Double
+    var bankCode: String? = nil
+    var ifsc: String? = nil
+    var branch: String? = nil
+    var tier: String? = nil
+    var imageRef: String? = nil   // user-supplied logo (file name in Documents or URL)
+}
+
+// MARK: - Credit card
+struct CreditCard: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String
+    var mask: String
+    var outstanding: Double
+    var limit: Double
+    var bankCode: String? = nil
+    var network: String? = nil
+    var tier: String? = nil
+    var colorHex: String? = nil
+    var imageRef: String? = nil
+    var rewardKind: String? = nil    // Points / Miles / Coins / Cashback
+    var rewardBalance: Double? = nil
+    var util: Int { limit > 0 ? Int((outstanding / limit * 100).rounded()) : 0 }
+    var rewardLabel: String? {
+        guard let k = rewardKind, let b = rewardBalance else { return nil }
+        let g = NumberFormatter.localizedString(from: NSNumber(value: b), number: .decimal)
+        switch k.lowercased() {
+        case "cashback": return "₹\(g) cashback"
+        case "miles": return "\(g) miles"
+        case "coins": return "\(g) coins"
+        default: return "\(g) pts"
+        }
+    }
+    var utilColorHex: String { util > 70 ? "9AA7BE" : (util > 40 ? "6E9BD8" : "7FC4A3") }
+}
+
+// MARK: - Deposit (FD / RD)
+struct Deposit: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var bank: String
+    var tag: String           // "FD" / "RD"
+    var symbol: String
+    var rate: Double          // interest %
+    var current: Double       // current value
+    var startDate: Date
+    var maturityDate: Date
+    var identifier: String? = nil   // deposit account number — for de-dup on re-import
+
+    var progress: Double {
+        let total = maturityDate.timeIntervalSince(startDate)
+        return total > 0 ? min(1, max(0, Date().timeIntervalSince(startDate) / total)) : 0
+    }
+    var rateText: String {
+        let r = (rate * 100).rounded() / 100
+        return (r == r.rounded() ? String(Int(r)) : String(format: "%.2f", r)) + "%"
+    }
+    var maturesText: String { maturityDate.formatted(.dateTime.month(.abbreviated).year()) }
+    var sub: String { tag == "RD" ? "Recurring deposit" : "Fixed deposit" }
+}
+
+// MARK: - Investment (stocks & mutual funds)
+enum InvestmentKind: String, Codable, CaseIterable {
+    case stock, etf, mutualFund
+    var label: String {
+        switch self { case .stock: return "Stock"; case .etf: return "ETF"; case .mutualFund: return "Mutual fund" }
+    }
+    var symbol: String {
+        switch self { case .stock: return "chart.bar.xaxis"; case .etf: return "chart.bar.doc.horizontal"; case .mutualFund: return "chart.pie.fill" }
+    }
+    var idLabel: String {
+        switch self { case .stock: return "Stock symbol"; case .etf: return "ETF symbol"; case .mutualFund: return "AMFI scheme code" }
+    }
+    /// Stocks & ETFs trade on exchanges (Yahoo); mutual funds use AMFI (India).
+    var usesMarket: Bool { self != .mutualFund }
+    /// Yahoo `quoteType` to filter search results.
+    var yahooType: String { self == .etf ? "ETF" : "EQUITY" }
+}
+
+struct Investment: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String
+    var kind: InvestmentKind
+    var units: Double
+    var avgCost: Double        // per unit
+    var identifier: String     // NSE symbol or AMFI scheme code
+    var lastPrice: Double      // cached latest quote/NAV
+    var lastUpdated: Date?
+
+    var invested: Double { units * avgCost }
+    var currentValue: Double { units * (lastPrice > 0 ? lastPrice : avgCost) }
+    var pnl: Double { currentValue - invested }
+    var pnlPct: Double { invested > 0 ? pnl / invested * 100 : 0 }
+}
+
+// MARK: - Goal
+enum GoalStatus: String, Codable, CaseIterable {
+    case onTrack = "On track"
+    case atRisk  = "At risk"
+    case paused  = "Paused"
+    case achieved = "Achieved"
+    var colorHex: String {
+        switch self {
+        case .onTrack: return "7FC4A3"   // sage
+        case .atRisk:  return "9AA7BE"   // slate caution (not red)
+        case .paused:  return "9AA3B2"   // muted
+        case .achieved: return "6E9BD8"  // calm blue
+        }
+    }
+    var next: GoalStatus {
+        switch self {
+        case .onTrack: return .atRisk
+        case .atRisk:  return .paused
+        case .paused:  return .onTrack
+        case .achieved: return .achieved
+        }
+    }
+}
+
+struct Goal: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var title: String
+    var symbol: String
+    var saved: Double
+    var target: Double
+    var monthly: Double
+    var deadline: Date
+    var status: GoalStatus
+    var pct: Double { target > 0 ? min(1, saved / target) : 0 }
+    var active: Bool { status == .onTrack || status == .atRisk }
+    var deadlineText: String { deadline.formatted(.dateTime.month(.abbreviated).year()) }
+}
+
+// MARK: - Milestone
+struct Milestone: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var amount: Double
+    var name: String
+    var tag: String
+    var reached: Bool
+    var active: Bool
+    var pct: Double           // 0...1 for active ring
+}
+
+// MARK: - Badge
+struct Badge: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var symbol: String
+    var label: String
+    var earned: Bool
+}
+
+// MARK: - Currencies (for multi-currency income)
+enum Currencies {
+    static let common = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "CAD", "AUD"]
+    /// Offline fallback rates → INR (used until live FX loads).
+    static let fallbackINR: [String: Double] = ["INR": 1, "USD": 83, "EUR": 90, "GBP": 105,
+                                                "AED": 22.6, "SGD": 62, "CAD": 61, "AUD": 55]
+    static func symbol(_ c: String) -> String {
+        ["INR": "₹", "USD": "$", "EUR": "€", "GBP": "£", "AED": "AED ", "SGD": "S$", "CAD": "C$", "AUD": "A$"][c] ?? (c + " ")
+    }
+}
+
+// MARK: - Income stream (manual, multi-currency)
+struct IncomeStream: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String
+    var symbol: String
+    var annual: Double             // annual amount, in `currency`
+    var currency: String = "INR"
+    var monthly: Bool = false      // whether the figure was entered per-month
+    var accountId: UUID? = nil     // linked bank account
+    var creditDay: Int? = nil      // day of month credited (monthly salary)
+
+    var perPeriodAmount: Double { monthly ? annual / 12 : annual }
+    var periodLabel: String { monthly ? "mo" : "yr" }
+}
+
+// MARK: - Net worth composition segment
+struct Segment: Identifiable, Hashable {
+    var id = UUID()
+    var label: String
+    var value: Double
+    var colorHex: String
+}
+
+// MARK: - Plan month (bar chart)
+struct PlanMonth: Identifiable, Hashable {
+    var id = UUID()
+    var month: String
+    var pct: Int              // % of budget used
+    var over: Bool
+}

@@ -1,0 +1,261 @@
+import SwiftUI
+import AuthenticationServices
+import CryptoKit
+
+/// A presentation anchor for ASWebAuthenticationSession that avoids the deprecated `UIWindow()`
+/// init — returns the active scene's key window (or a windowScene-based window).
+@MainActor func wtmPresentationAnchor() -> ASPresentationAnchor {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let windows = scenes.flatMap { $0.windows }
+    // A foreground web-auth session always has a window scene; build one only if no window exists.
+    return windows.first(where: { $0.isKeyWindow }) ?? windows.first ?? UIWindow(windowScene: scenes.first!)
+}
+
+/// Links a Gmail account (OAuth 2.0 + PKCE, read-only) and scans bank/card alert
+/// emails into transactions. Uses a user-supplied Google OAuth iOS client ID.
+@MainActor
+final class GmailManager: NSObject, ObservableObject {
+    enum Phase: Equatable { case idle, working(String), success(Int), failed(String) }
+    @Published var phase: Phase = .idle
+    /// Public OAuth client ID, configured at build time in Info.plist (key GIDClientID).
+    let clientID: String = (Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String) ?? ""
+    @Published var connected: Bool = Keychain.get("gmail_refresh") != nil
+    @Published var scanDays: Int = (UserDefaults.standard.object(forKey: "gmail_days") as? Int) ?? 60
+    @Published var autoScan: Bool = (UserDefaults.standard.object(forKey: "gmail_autoscan") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(autoScan, forKey: "gmail_autoscan") }
+    }
+    @Published var statementAutoScan: Bool = (UserDefaults.standard.object(forKey: "gmail_stmt_autoscan") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(statementAutoScan, forKey: "gmail_stmt_autoscan") }
+    }
+    @Published var pending: [PendingStatement] = GmailManager.dedupe(GmailManager.loadPending())
+    @Published var stmtPhase: Phase = .idle
+    /// Keys (messageId:attachmentId) of statement emails already imported or dismissed — so a
+    /// re-scan never re-imports (duplicates) or re-queues them.
+    private var processed: Set<String> = GmailManager.loadProcessed()
+
+    private var session: ASWebAuthenticationSession?
+    private var verifier = ""
+
+    var lastScan: Date? { UserDefaults.standard.object(forKey: "gmail_last") as? Date }
+    var lastStatementScan: Date? { UserDefaults.standard.object(forKey: "gmail_stmt_last") as? Date }
+    var isConfigured: Bool { clientID.hasSuffix(".apps.googleusercontent.com") }
+    var isWorking: Bool { if case .working = phase { return true } else { return false } }
+
+    /// Reversed-DNS scheme Google requires for iOS OAuth, derived from the client ID.
+    private var scheme: String {
+        let id = clientID.replacingOccurrences(of: ".apps.googleusercontent.com", with: "")
+        return "com.googleusercontent.apps.\(id)"
+    }
+    private var redirectURI: String { "\(scheme):/oauth2redirect" }
+
+    func saveConfig() {
+        UserDefaults.standard.set(scanDays, forKey: "gmail_days")
+    }
+    func disconnect() { Keychain.set(nil, for: "gmail_refresh"); connected = false; phase = .idle }
+
+    /// Full reset for "Clear all data": forget the account, saved passwords, pending statements
+    /// (incl. cached PDFs), all Gmail preferences and in-memory state.
+    func reset() {
+        disconnect()
+        StatementVault.clear()
+        for p in pending { try? FileManager.default.removeItem(at: Self.cacheDir.appendingPathComponent(p.cacheFile)) }
+        // sweep any stray cached statement PDFs
+        if let files = try? FileManager.default.contentsOfDirectory(at: Self.cacheDir, includingPropertiesForKeys: nil) {
+            for u in files where u.lastPathComponent.hasPrefix("stmt_") { try? FileManager.default.removeItem(at: u) }
+        }
+        pending = []; processed = []
+        let d = UserDefaults.standard
+        ["gmail_days", "gmail_autoscan", "gmail_stmt_autoscan", "gmail_last", "gmail_stmt_last", "gmail_pending_stmts", "gmail_done_stmts"].forEach { d.removeObject(forKey: $0) }
+        scanDays = 60; autoScan = true; statementAutoScan = true
+        phase = .idle; stmtPhase = .idle
+    }
+
+    func connect() { Task { await runConnect() } }
+    func scan(into store: Store) { guard !isWorking else { return }; Task { await runScan(store) } }
+    func scanStatements(into store: Store) { Task { await runStatementScan(store) } }
+
+    /// Background / on-launch scan: runs quietly only if connected, enabled, and stale (>6h).
+    func backgroundScanIfDue(into store: Store) async {
+        guard connected, autoScan, isConfigured, !isWorking else { return }
+        if let last = lastScan, Date().timeIntervalSince(last) < 6 * 3600 { return }
+        await runScan(store)
+    }
+    /// Background statement scan: connected + enabled + stale (>20h, ~daily).
+    func statementScanIfDue(into store: Store) async {
+        guard connected, statementAutoScan, isConfigured else { return }
+        if let last = lastStatementScan, Date().timeIntervalSince(last) < 20 * 3600 { return }
+        await runStatementScan(store)
+    }
+
+    // MARK: statement PDFs from Gmail
+    private func runStatementScan(_ store: Store) async {
+        guard connected else { stmtPhase = .failed("Connect Gmail first."); return }
+        do {
+            stmtPhase = .working("Looking for statements…")
+            let token = try await accessToken()
+            let mails = try await GmailProvider.fetchStatements(accessToken: token, days: max(scanDays, 90))
+            let vault = StatementVault.passwords()
+            var imported = 0
+            for m in mails {
+                let key = "\(m.messageId):\(m.attachmentId)"
+                if processed.contains(key) || pending.contains(where: { $0.messageId == m.messageId && $0.attachmentId == m.attachmentId }) { continue }
+                let data = try await GmailProvider.downloadAttachment(accessToken: token, messageId: m.messageId, attachmentId: m.attachmentId)
+                if let r = tryParse(data: data, passwords: vault) {
+                    store.mergeImport(r); markProcessed(key); imported += 1
+                } else if StatementImporter.isLocked(data: data) {
+                    addPending(m, data: data)            // couldn't unlock with a saved password
+                }
+            }
+            UserDefaults.standard.set(Date(), forKey: "gmail_stmt_last")
+            stmtPhase = .success(imported)
+        } catch {
+            stmtPhase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+    }
+    /// Try each saved password (and no-password) against a PDF; nil if none worked.
+    private func tryParse(data: Data, passwords: [String]) -> ImportResult? {
+        for pw in [nil] + passwords.map(Optional.some) {
+            if let r = try? StatementImporter.parse(data: data, password: pw), !(r.txns.isEmpty && r.accounts.isEmpty && r.deposits.isEmpty) { return r }
+        }
+        return nil
+    }
+    /// Import a previously-pending statement with a user-entered password.
+    @discardableResult
+    func importPending(_ p: PendingStatement, password: String, into store: Store) -> Bool {
+        guard let data = try? Data(contentsOf: Self.cacheDir.appendingPathComponent(p.cacheFile)) else { return false }
+        guard let r = try? StatementImporter.parse(data: data, password: password) else { return false }
+        store.mergeImport(r)
+        StatementVault.add(password)                     // remember it for next time
+        markProcessed(p.id)                              // never re-fetch/re-queue it
+        removePending(p)
+        return true
+    }
+    /// Dismiss a pending statement without importing — and remember it so it doesn't return.
+    func dismissPending(_ p: PendingStatement) { markProcessed(p.id); removePending(p) }
+
+    private func addPending(_ m: GmailProvider.StatementMail, data: Data) {
+        let key = "\(m.messageId):\(m.attachmentId)"
+        guard !processed.contains(key), !pending.contains(where: { $0.id == key }) else { return }
+        let file = "stmt_\(m.messageId)_\(m.attachmentId).pdf"
+        try? data.write(to: Self.cacheDir.appendingPathComponent(file))
+        pending.append(PendingStatement(messageId: m.messageId, attachmentId: m.attachmentId, filename: m.filename,
+                                        sender: m.sender, date: m.date, cacheFile: file))
+        savePending()
+    }
+    func removePending(_ p: PendingStatement) {
+        try? FileManager.default.removeItem(at: Self.cacheDir.appendingPathComponent(p.cacheFile))
+        pending.removeAll { $0.id == p.id }; savePending()
+    }
+    private func savePending() {
+        if let d = try? JSONEncoder().encode(pending) { UserDefaults.standard.set(d, forKey: "gmail_pending_stmts") }
+    }
+    private static func loadPending() -> [PendingStatement] {
+        guard let d = UserDefaults.standard.data(forKey: "gmail_pending_stmts"),
+              let a = try? JSONDecoder().decode([PendingStatement].self, from: d) else { return [] }
+        return a
+    }
+    private static func dedupe(_ ps: [PendingStatement]) -> [PendingStatement] {
+        var seen = Set<String>(); return ps.filter { seen.insert($0.id).inserted }
+    }
+
+    // MARK: processed-statement ledger
+    private func markProcessed(_ key: String) { processed.insert(key); saveProcessed() }
+    private func saveProcessed() { UserDefaults.standard.set(Array(processed), forKey: "gmail_done_stmts") }
+    private static func loadProcessed() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: "gmail_done_stmts") ?? [])
+    }
+    private static var cacheDir: URL { FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0] }
+
+    private func runConnect() async {
+        guard isConfigured else { phase = .failed("Enter your Google OAuth client ID first."); return }
+        do {
+            verifier = Self.randomString(64)
+            let challenge = Self.base64URL(Data(SHA256.hash(data: Data(verifier.utf8))))
+            var c = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
+            c.queryItems = [
+                .init(name: "client_id", value: clientID),
+                .init(name: "redirect_uri", value: redirectURI),
+                .init(name: "response_type", value: "code"),
+                .init(name: "scope", value: "https://www.googleapis.com/auth/gmail.readonly"),
+                .init(name: "code_challenge", value: challenge),
+                .init(name: "code_challenge_method", value: "S256"),
+                .init(name: "access_type", value: "offline"),
+                .init(name: "prompt", value: "consent")
+            ]
+            phase = .working("Waiting for Google sign-in…")
+            let callback = try await authorize(url: c.url!)
+            guard let code = URLComponents(string: callback.absoluteString)?.queryItems?.first(where: { $0.name == "code" })?.value else {
+                throw GmailError.tokenFailed
+            }
+            try await exchange(code: code)
+            connected = true; phase = .idle
+        } catch {
+            phase = .failed((error as? LocalizedError)?.errorDescription ?? "Sign-in cancelled.")
+        }
+    }
+
+    private func runScan(_ store: Store) async {
+        guard connected else { phase = .failed("Connect Gmail first."); return }
+        do {
+            phase = .working("Reading transaction emails…")
+            let token = try await accessToken()
+            let (txns, balances) = try await GmailProvider.fetchTransactions(accessToken: token, days: scanDays)
+            let n = store.mergeSynced(accounts: [], txns: txns, adjustBalances: true)
+            store.applyBalances(balances)
+            UserDefaults.standard.set(Date(), forKey: "gmail_last")
+            phase = .success(n)
+        } catch {
+            phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+    }
+
+    // MARK: tokens
+    private func exchange(code: String) async throws {
+        let form = ["code": code, "client_id": clientID, "redirect_uri": redirectURI,
+                    "grant_type": "authorization_code", "code_verifier": verifier]
+        let json = try await postToken(form)
+        if let refresh = json["refresh_token"] as? String { Keychain.set(refresh, for: "gmail_refresh") }
+        guard json["access_token"] is String else { throw GmailError.tokenFailed }
+    }
+    private func accessToken() async throws -> String {
+        guard let refresh = Keychain.get("gmail_refresh") else { throw GmailError.notConnected }
+        let json = try await postToken(["client_id": clientID, "refresh_token": refresh, "grant_type": "refresh_token"])
+        guard let token = json["access_token"] as? String else { throw GmailError.tokenFailed }
+        return token
+    }
+    private func postToken(_ form: [String: String]) async throws -> [String: Any] {
+        var req = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        req.httpBody = form.map { "\($0)=\($1.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? $1)" }.joined(separator: "&").data(using: .utf8)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard ((resp as? HTTPURLResponse)?.statusCode ?? 0) < 300 else { throw GmailError.tokenFailed }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    }
+
+    // MARK: OAuth web step
+    private func authorize(url: URL) async throws -> URL {
+        try await withCheckedThrowingContinuation { cont in
+            let s = ASWebAuthenticationSession(url: url, callbackURLScheme: scheme) { cb, err in
+                if let cb { cont.resume(returning: cb) } else { cont.resume(throwing: err ?? GmailError.tokenFailed) }
+            }
+            s.presentationContextProvider = self
+            s.prefersEphemeralWebBrowserSession = false
+            session = s
+            if !s.start() { cont.resume(throwing: GmailError.tokenFailed) }
+        }
+    }
+
+    private static func randomString(_ n: Int) -> String {
+        let cs = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return String((0..<n).map { _ in cs[Int.random(in: 0..<cs.count)] })
+    }
+    private static func base64URL(_ d: Data) -> String {
+        d.base64EncodedString().replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+    }
+}
+
+extension GmailManager: ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor { wtmPresentationAnchor() }
+}
