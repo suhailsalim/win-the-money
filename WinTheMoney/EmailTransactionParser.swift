@@ -44,13 +44,21 @@ enum EmailTransactionParser {
                         counterparty: merchant, merchant: merchant, narration: "Scapia Federal CC · \(merchant)", date: d)
         }
 
-        // 4b) Scapia Federal — waiver / credit-debit notice
-        if let g = cap(#"(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+has been\s+(credited|debited)\s+to your Scapia Federal Credit Card ending in\s+(\d+)\s+on\s+(\d{2}-\d{2}-\d{4})"#, text, 4) {
+        // 4b) Scapia Federal — waiver / credit-debit notice (e.g. fuel surcharge waiver credited)
+        if let g = cap(#"(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+has been\s+(credited|debited)\s+to your Scapia Federal[^.]*?Credit Card ending in\s+(\d+)\s+on\s+(\d{2}-\d{2}-\d{4})"#, text, 4) {
             let credit = g[2].lowercased() == "credited"
             let what = text.lowercased().contains("fuel surcharge") ? "Fuel surcharge waiver" : "Scapia Federal CC"
             return make(src, mask: g[3], amount: g[1], credit: credit, source: .card, bankCode: "FED",
                         counterparty: what, merchant: what, narration: "Scapia Federal Credit Card",
                         date: date(g[4]) ?? headerDate)
+        }
+
+        // 4c) Scapia Federal — refund received (credit; amount + merchant in the detail box, no in-body date)
+        if let g = cap(#"received a refund on your Scapia Federal[^.]*?Credit Card ending in\s+(\d+)[\s\S]*?Amount\s*(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s*Merchant\s+([^\n]{2,40})"#, text, 3) {
+            let merchant = boundMerchant(g[3])
+            return make(src, mask: g[1], amount: g[2], credit: true, source: .card, bankCode: "FED",
+                        counterparty: merchant, merchant: merchant,
+                        narration: "Scapia Federal CC refund · \(merchant)", date: headerDate)
         }
 
         return nil
