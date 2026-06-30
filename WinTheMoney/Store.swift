@@ -97,7 +97,8 @@ final class Store: ObservableObject {
     var toTargetPct: Int { netWorthTarget > 0 ? Int(min(100, liquidNetWorth / netWorthTarget * 100)) : 0 }
 
     var spentTotal: Double { monthSpend(monthsAgo: 0) }
-    var planTotal: Double { categories.map(\.plan).reduce(0,+) }
+    /// Sum of caps normalised to per-month, so quarterly/annual caps fold into the monthly overview.
+    var planTotal: Double { categories.map(\.monthlyPlan).reduce(0,+) }
     var planLeft: Double { planTotal - spentTotal }
     var planPct: Int { planTotal > 0 ? Int((spentTotal/planTotal*100).rounded()) : 0 }
     var top3: [BudgetCategory] { Array(categories.sorted { $0.spent > $1.spent }.prefix(3)) }
@@ -225,14 +226,48 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Single source of truth for category spend (this month), applying transfer/refund rules.
+    /// Single source of truth for category spend, applying transfer/refund rules. Each category's
+    /// `spent` is the net spend within *its own* current cap cycle (monthly by default, but a
+    /// quarterly/annual/custom cap counts spend over that whole window — e.g. a yearly insurance cap).
     func recomputeSpent() {
-        let cal = Calendar.current, now = Date()
-        var totals: [String: Double] = [:]
-        for t in txns where cal.isDate(t.date, equalTo: now, toGranularity: .month) {
-            let c = spendContribution(t); if c != 0 { totals[t.category, default: 0] += c }
+        for i in categories.indices {
+            let (start, end) = cycleWindow(for: categories[i])
+            let name = categories[i].name
+            let total = txns.filter { $0.category == name && $0.date >= start && $0.date < end }
+                .map(spendContribution).reduce(0, +)
+            categories[i].spent = max(0, total)
         }
-        for i in categories.indices { categories[i].spent = max(0, totals[categories[i].name] ?? 0) }
+    }
+
+    /// First day of the financial year (Apr–Mar, India) containing `d`. Default cap-cycle anchor.
+    static func financialYearStart(_ d: Date = Date()) -> Date {
+        let cal = Calendar.current
+        let y = cal.component(.year, from: d)
+        let startYear = cal.component(.month, from: d) >= 4 ? y : y - 1
+        return cal.date(from: DateComponents(year: startYear, month: 4, day: 1)) ?? d
+    }
+
+    /// The [start, end) of the cap cycle that currently contains today, for category `c`. Monthly and
+    /// quarterly align to the calendar; annual/custom step from the category anchor (else the FY start).
+    func cycleWindow(for c: BudgetCategory) -> (Date, Date) {
+        let cal = Calendar.current, now = Date()
+        switch c.period {
+        case .monthly:
+            let start = cal.dateInterval(of: .month, for: now)?.start ?? now
+            return (start, cal.date(byAdding: .month, value: 1, to: start) ?? now)
+        case .quarterly:
+            let m = cal.component(.month, from: now)
+            let qStartMonth = ((m - 1) / 3) * 3 + 1
+            let start = cal.date(from: DateComponents(year: cal.component(.year, from: now), month: qStartMonth, day: 1)) ?? now
+            return (start, cal.date(byAdding: .month, value: 3, to: start) ?? now)
+        case .annual, .custom:
+            let len = c.periodMonths
+            let anchor = c.anchor ?? Self.financialYearStart(now)
+            let monthsSince = cal.dateComponents([.month], from: anchor, to: now).month ?? 0
+            let k = max(0, monthsSince / len)
+            let start = cal.date(byAdding: .month, value: k * len, to: anchor) ?? anchor
+            return (start, cal.date(byAdding: .month, value: len, to: start) ?? now)
+        }
     }
     var planMonths: [PlanMonth] {
         let cal = Calendar.current
