@@ -105,12 +105,17 @@ final class GmailManager: NSObject, ObservableObject {
                 let data = try await GmailProvider.downloadAttachment(accessToken: token, messageId: m.messageId, attachmentId: m.attachmentId)
                 if StatementImporter.isUnsupportedDocument(data: data) {
                     markProcessed(key)                   // loan foreclosure/pre-payment doc — never a statement
-                } else if let r = tryParse(data: data, passwords: vault) {
-                    let rec = StatementRecord(fileName: m.filename.isEmpty ? "Statement" : m.filename,
-                                              source: "Gmail", importedAt: Date(), gmailKey: key)
-                    store.mergeImport(r, record: rec); markProcessed(key); imported += 1
-                } else if StatementImporter.isLocked(data: data) {
-                    addPending(m, data: data)            // couldn't unlock with a saved password
+                } else {
+                    switch tryImport(data: data, passwords: vault) {
+                    case .parsed(let r):
+                        let rec = StatementRecord(fileName: m.filename.isEmpty ? "Statement" : m.filename,
+                                                  source: "Gmail", importedAt: Date(), gmailKey: key)
+                        store.mergeImport(r, record: rec); markProcessed(key); imported += 1
+                    case .unlockedButEmpty:
+                        markProcessed(key)               // a password opened it but there was nothing to import — not a password problem, so don't queue it
+                    case .needsPassword:
+                        addPending(m, data: data)        // genuinely locked: no saved password opened it
+                    }
                 }
             }
             UserDefaults.standard.set(Date(), forKey: "gmail_stmt_last")
@@ -119,24 +124,50 @@ final class GmailManager: NSObject, ObservableObject {
             stmtPhase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
     }
-    /// Try each saved password (and no-password) against a PDF; nil if none worked.
-    private func tryParse(data: Data, passwords: [String]) -> ImportResult? {
+    private enum ImportAttempt { case parsed(ImportResult); case unlockedButEmpty; case needsPassword }
+    /// Try no-password then each saved password. Distinguishes "a password opened it but we couldn't
+    /// parse anything" (`.unlockedButEmpty` — *not* a password problem) from "nothing opened it"
+    /// (`.needsPassword`). The old code conflated the two, so an unlockable-but-unparseable PDF got
+    /// stuck forever in "needs password" (see bug-019).
+    private func tryImport(data: Data, passwords: [String]) -> ImportAttempt {
+        var unlocked = false
         for pw in [nil] + passwords.map(Optional.some) {
-            if let r = try? StatementImporter.parse(data: data, password: pw), !(r.txns.isEmpty && r.accounts.isEmpty && r.deposits.isEmpty) { return r }
+            do {
+                let r = try StatementImporter.parse(data: data, password: pw)
+                if !(r.txns.isEmpty && r.accounts.isEmpty && r.deposits.isEmpty) { return .parsed(r) }
+                unlocked = true                          // opened, but produced nothing
+            } catch StatementError.locked, StatementError.wrongPassword {
+                continue                                 // this candidate password didn't open it
+            } catch {
+                unlocked = true                          // opened, but parsing / this doc-type failed
+            }
         }
-        return nil
+        return unlocked ? .unlockedButEmpty : .needsPassword
     }
-    /// Import a previously-pending statement with a user-entered password.
+    /// Import a previously-pending statement with a user-entered password. Returns nil on success, or
+    /// the reason it failed: `.wrongPassword`/`.locked` keep it queued so the user can retry; any
+    /// other error means it *opened* but couldn't be parsed — so it's dropped from the queue (it was
+    /// never a password problem) and the real reason is surfaced instead of a bogus "wrong password".
     @discardableResult
-    func importPending(_ p: PendingStatement, password: String, into store: Store) -> Bool {
-        guard let data = try? Data(contentsOf: Self.cacheDir.appendingPathComponent(p.cacheFile)) else { return false }
-        guard let r = try? StatementImporter.parse(data: data, password: password) else { return false }
-        store.mergeImport(r, record: StatementRecord(fileName: p.filename.isEmpty ? "Statement" : p.filename,
-                                                     source: "Gmail", importedAt: Date(), gmailKey: p.id))
-        StatementVault.add(password)                     // remember it for next time
-        markProcessed(p.id)                              // never re-fetch/re-queue it
-        removePending(p)
-        return true
+    func importPending(_ p: PendingStatement, password: String, into store: Store) -> StatementError? {
+        guard let data = try? Data(contentsOf: Self.cacheDir.appendingPathComponent(p.cacheFile)) else { return .cannotOpen }
+        do {
+            let r = try StatementImporter.parse(data: data, password: password)
+            guard !(r.txns.isEmpty && r.accounts.isEmpty && r.deposits.isEmpty) else {
+                markProcessed(p.id); removePending(p); return .noTransactions   // opened, but nothing to import
+            }
+            store.mergeImport(r, record: StatementRecord(fileName: p.filename.isEmpty ? "Statement" : p.filename,
+                                                         source: "Gmail", importedAt: Date(), gmailKey: p.id))
+            StatementVault.add(password)                 // remember it for next time
+            markProcessed(p.id)                          // never re-fetch/re-queue it
+            removePending(p)
+            return nil
+        } catch StatementError.wrongPassword { return .wrongPassword }
+        catch StatementError.locked { return .locked }
+        catch {
+            markProcessed(p.id); removePending(p)        // opened but unparseable — stop nagging for a password
+            return (error as? StatementError) ?? .noTransactions
+        }
     }
     /// Dismiss a pending statement without importing — and remember it so it doesn't return.
     func dismissPending(_ p: PendingStatement) { markProcessed(p.id); removePending(p) }

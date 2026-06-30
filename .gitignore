@@ -26,4 +26,5 @@ xcuserdata/
 # Local tooling / scratch
 /tmp/
 *.log
-FederalBank2557statement.pdf
+# Real bank/card statements must never be committed (AGENTS.md). Ignore all PDFs.
+*.pdf

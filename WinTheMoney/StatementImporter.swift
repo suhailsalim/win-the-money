@@ -58,32 +58,21 @@ enum StatementImporter {
         for i in 0..<doc.pageCount {
             if let s = doc.page(at: i)?.string { text += s + "\n" }
         }
+        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         // Text-layer PDF → coordinate-based row reconstruction (recovers columns/narration).
-        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if hasText {
             // Loan foreclosure / pre-payment statements share the HDFC look-and-feel but list
             // payable figures, not transactions — reject before any parser fabricates txns.
             if StatementParser.isLoanClosureStatement(text) { throw StatementError.unsupportedDocument }
-            let pages = PDFTableReader.words(doc)
-            // HDFC combined statement → many accounts + FDs/RDs.
-            if StatementParser.isCombinedHDFC(text) {
-                let pageTexts = (0..<doc.pageCount).map { doc.page(at: $0)?.string ?? "" }
-                let r = StatementParser.parseCombined(pageTexts: pageTexts, pageWords: pages)
-                guard !r.accounts.isEmpty || !r.deposits.isEmpty else { throw StatementError.noTransactions }
-                return ImportResult(accounts: r.accounts, txns: r.txns, deposits: r.deposits)
-            }
-            // Credit-card statement? (extracts limit + total due even if the txn table is sparse.)
-            if let card = CardStatementParser.parse(text: text, pages: pages) {
-                return ImportResult(accounts: [card.account], txns: card.txns)
-            }
-            let txns = StatementParser.parse(text: text, pages: pages)
-            var account = StatementParser.account(text)
-            if account != nil, account!.asOf == nil { account!.asOf = txns.map(\.date).max() }
-            guard !txns.isEmpty || account != nil else { throw StatementError.noTransactions }
-            return ImportResult(accounts: account.map { [$0] } ?? [], txns: txns)
+            // A present-but-unparseable text layer (e.g. obfuscated/mispositioned glyphs) returns nil
+            // here so we fall through to OCR instead of giving up with .noTransactions.
+            if let r = parseTextLayer(text: text, doc: doc) { return r }
         }
-        // Scanned / image-only PDF (no text layer) → OCR with Vision, then text parse.
+        // Scanned / image-only PDF, or a text layer nothing could parse → OCR with Vision, then parse.
         let ocr = ocrText(from: doc)
-        guard !ocr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw StatementError.noText }
+        guard !ocr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw hasText ? StatementError.noTransactions : StatementError.noText
+        }
         if StatementParser.isLoanClosureStatement(ocr) { throw StatementError.unsupportedDocument }
         if let card = CardStatementParser.parse(text: ocr) {
             return ImportResult(accounts: [card.account], txns: card.txns)
@@ -91,6 +80,28 @@ enum StatementImporter {
         let txns = StatementParser.parse(ocr)
         let account = StatementParser.account(ocr)
         guard !txns.isEmpty || account != nil else { throw StatementError.noTransactions }
+        return ImportResult(accounts: account.map { [$0] } ?? [], txns: txns)
+    }
+
+    /// Parse a non-empty text layer (combined → card → single bank). Returns nil when nothing could
+    /// be extracted, so the caller can fall back to OCR rather than failing outright.
+    private static func parseTextLayer(text: String, doc: PDFDocument) -> ImportResult? {
+        let pages = PDFTableReader.words(doc)
+        // HDFC combined statement → many accounts + FDs/RDs.
+        if StatementParser.isCombinedHDFC(text) {
+            let pageTexts = (0..<doc.pageCount).map { doc.page(at: $0)?.string ?? "" }
+            let r = StatementParser.parseCombined(pageTexts: pageTexts, pageWords: pages)
+            guard !r.accounts.isEmpty || !r.deposits.isEmpty else { return nil }
+            return ImportResult(accounts: r.accounts, txns: r.txns, deposits: r.deposits)
+        }
+        // Credit-card statement? (extracts limit + total due even if the txn table is sparse.)
+        if let card = CardStatementParser.parse(text: text, pages: pages) {
+            return ImportResult(accounts: [card.account], txns: card.txns)
+        }
+        let txns = StatementParser.parse(text: text, pages: pages)
+        var account = StatementParser.account(text)
+        if account != nil, account!.asOf == nil { account!.asOf = txns.map(\.date).max() }
+        guard !txns.isEmpty || account != nil else { return nil }
         return ImportResult(accounts: account.map { [$0] } ?? [], txns: txns)
     }
 

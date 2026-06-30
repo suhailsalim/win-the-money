@@ -44,7 +44,7 @@ extension BudgetCategory {
 
 // MARK: Txn
 extension Txn {
-    enum CodingKeys: String, CodingKey { case id, merchant, symbol, category, account, amount, date, externalId, source, counterparty, statementId, statementRecordId, needsReview, tags, transfer }
+    enum CodingKeys: String, CodingKey { case id, merchant, symbol, category, account, amount, date, externalId, source, counterparty, statementId, statementRecordId, needsReview, tags, transfer, cardholder, reward, rewardCurrency, forexCurrency, forexAmount }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.decode(.id, default: UUID())
@@ -62,6 +62,11 @@ extension Txn {
         needsReview = c.decode(.needsReview, default: false)
         tags = c.decode(.tags, default: [])
         transfer = c.decode(.transfer, default: false)
+        cardholder = c.decode(.cardholder, default: nil)
+        reward = c.decode(.reward, default: nil)
+        rewardCurrency = c.decode(.rewardCurrency, default: nil)
+        forexCurrency = c.decode(.forexCurrency, default: nil)
+        forexAmount = c.decode(.forexAmount, default: nil)
     }
 }
 

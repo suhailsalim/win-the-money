@@ -220,13 +220,25 @@ struct HomeView: View {
 struct CategoryRow: View {
     var c: BudgetCategory
     var compact = false
+    /// When set (Plan period/month views), the row shows these figures instead of the live cap-cycle ones.
+    var spentOverride: Double? = nil
+    var planOverride: Double? = nil
+    var periodNoun: String? = nil           // overrides the "/month" suffix label (e.g. "period")
+
+    private var spent: Double { spentOverride ?? c.spent }
+    private var plan: Double { planOverride ?? c.plan }
+    private var pct: Double { plan > 0 ? spent / plan : 0 }
+    private var over: Bool { spent > plan }
+    private var left: Double { plan - spent }
+    private var barHex: String { over ? "9AA7BE" : (pct > 0.85 ? "6E9BD8" : "7FC4A3") }
+
     var body: some View {
         HStack(spacing: 12) {
             IconChip(symbol: c.symbol, size: compact ? 34 : 40, tint: Color(hex: c.color))
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(c.name).font(.subheadline.weight(compact ? .semibold : .bold)).foregroundStyle(Zen.ink)
-                    if c.period != .monthly {
+                    if spentOverride == nil, c.period != .monthly {
                         Text(c.period == .custom ? "\(c.periodMonths)mo" : c.period.label)
                             .font(.caption2.weight(.bold)).foregroundStyle(Zen.accentDeep)
                             .padding(.horizontal, 6).padding(.vertical, 1)
@@ -234,16 +246,17 @@ struct CategoryRow: View {
                     }
                     Spacer()
                     HStack(spacing: 3) {
-                        Text(INR.compact(c.spent)).foregroundStyle(Zen.ink2)
-                        Text("/ \(INR.compact(c.plan))").foregroundStyle(Zen.ink3)
+                        Text(INR.compact(spent)).foregroundStyle(Zen.ink2)
+                        Text("/ \(INR.compact(plan))").foregroundStyle(Zen.ink3)
                     }.font(.caption.weight(.semibold))
                 }
-                ZenBar(value: c.pct, tint: AnyShapeStyle(Color(hex: c.barColorHex)))
+                ZenBar(value: pct, tint: AnyShapeStyle(Color(hex: barHex)))
             }
             if !compact {
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text("\(Int(c.pct*100))%").font(.subheadline.weight(.bold)).foregroundStyle(Color(hex: c.barColorHex))
-                    Text("\(INR.compact(abs(c.left))) \(c.over ? "over" : "left")\(c.period == .monthly ? "" : "/\(c.period.noun)")").font(.caption2).foregroundStyle(Zen.ink3)
+                    Text("\(Int(pct*100))%").font(.subheadline.weight(.bold)).foregroundStyle(Color(hex: barHex))
+                    let noun = periodNoun ?? (c.period == .monthly ? "" : c.period.noun)
+                    Text("\(INR.compact(abs(left))) \(over ? "over" : "left")\(noun.isEmpty ? "" : "/\(noun)")").font(.caption2).foregroundStyle(Zen.ink3)
                 }.frame(width: 64, alignment: .trailing)
             }
         }

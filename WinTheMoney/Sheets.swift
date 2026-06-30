@@ -67,6 +67,13 @@ struct TransactionsSheet: View {
     @State private var tag: String? = nil
     @State private var hideTransfers = false
 
+    /// Default presentation, or pre-filtered for a drill-in (a category, account, or tag).
+    init(account: String? = nil, category: String? = nil, tag: String? = nil) {
+        _account = State(initialValue: account)
+        _category = State(initialValue: category)
+        _tag = State(initialValue: tag)
+    }
+
     private var activeCount: Int {
         (account != nil ? 1 : 0) + (category != nil ? 1 : 0) + (type != .all ? 1 : 0) + (preset != .all ? 1 : 0)
             + (sort != .newest ? 1 : 0) + (tag != nil ? 1 : 0) + (hideTransfers ? 1 : 0)
@@ -165,12 +172,26 @@ struct TransactionsSheet: View {
                     }
                     Text(t.merchant).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
                 }
-                Text("\(t.category) · \(t.account) · \(t.date.formatted(.dateTime.day().month()))")
+                Text("\(t.category) · \(t.account) · \(t.date.formatted(.dateTime.day().month()))"
+                     + (t.cardholder.map { " · \($0)’s add-on card" } ?? ""))
                     .font(.caption2).foregroundStyle(Zen.ink3).lineLimit(1)
-                if !t.tags.isEmpty || t.transfer {
+                let pills = t.tags.filter { $0 != "International" }   // shown via the globe chip instead
+                if !pills.isEmpty || t.transfer {
                     HStack(spacing: 4) {
                         if t.transfer { TagPill(text: "Credit card bill") }
-                        ForEach(t.tags.prefix(t.transfer ? 1 : 2), id: \.self) { TagPill(text: $0) }
+                        ForEach(pills.prefix(t.transfer ? 1 : 2), id: \.self) { TagPill(text: $0) }
+                    }
+                }
+                if t.isInternational || t.rewardLabel != nil {
+                    HStack(spacing: 8) {
+                        if let fx = t.forexLabel {
+                            Label(fx, systemImage: "globe").font(.caption2.weight(.semibold)).foregroundStyle(Zen.accentDeep)
+                        } else if t.isInternational {
+                            Label("International", systemImage: "globe").font(.caption2.weight(.semibold)).foregroundStyle(Zen.accentDeep)
+                        }
+                        if let rl = t.rewardLabel {
+                            Label(rl, systemImage: "star.fill").font(.caption2.weight(.semibold)).foregroundStyle(Zen.greenDeep)
+                        }
                     }
                 }
             }
@@ -341,6 +362,14 @@ struct LogTxnSheet: View {
                         }
                     }
                 } header: { Text("Tags") }
+                if let e = editing, e.cardholder != nil || e.rewardLabel != nil || e.isInternational {
+                    Section {
+                        if let h = e.cardholder { LabeledContent("Add-on cardholder", value: h) }
+                        if let fx = e.forexLabel { LabeledContent("Original amount", value: fx) }
+                        else if e.isInternational { LabeledContent("International", value: "Yes") }
+                        if let rl = e.rewardLabel { LabeledContent("Reward earned", value: rl) }
+                    } header: { Text("Statement details") }
+                }
                 if let e = editing { DeleteSheetButton(noun: "transaction") { store.remove(txn: e); dismiss() } }
             }
             .zenForm()
@@ -356,7 +385,9 @@ struct LogTxnSheet: View {
                             store.update(Txn(id: e.id, merchant: merchant.isEmpty ? "Transaction" : merchant, symbol: sym,
                                              category: cat, account: account, amount: amt, date: date, externalId: e.externalId,
                                              source: e.source, counterparty: e.counterparty, statementId: e.statementId,
-                                             statementRecordId: e.statementRecordId, tags: tags, transfer: transfer))
+                                             statementRecordId: e.statementRecordId, tags: tags, transfer: transfer,
+                                             cardholder: e.cardholder, reward: e.reward, rewardCurrency: e.rewardCurrency,
+                                             forexCurrency: e.forexCurrency, forexAmount: e.forexAmount))
                         } else {
                             store.logTxn(Txn(merchant: merchant.isEmpty ? "Transaction" : merchant, symbol: sym,
                                              category: cat, account: account, amount: amt, date: date,
@@ -1251,7 +1282,7 @@ struct StatementsEmailView: View {
     @State private var newPassword = ""
     @State private var unlocking: PendingStatement?
     @State private var enteredPw = ""
-    @State private var unlockError = false
+    @State private var unlockMessage: String? = nil
 
     private var stmtPhase: SyncManager.Phase {
         switch gmail.stmtPhase {
@@ -1272,7 +1303,7 @@ struct StatementsEmailView: View {
             if !gmail.pending.isEmpty {
                 Section {
                     ForEach(gmail.pending) { p in
-                        Button { unlocking = p; enteredPw = ""; unlockError = false } label: {
+                        Button { unlocking = p; enteredPw = ""; unlockMessage = nil } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(p.filename).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink).lineLimit(1)
@@ -1304,10 +1335,16 @@ struct StatementsEmailView: View {
         .alert("Unlock statement", isPresented: Binding(get: { unlocking != nil }, set: { if !$0 { unlocking = nil } })) {
             SecureField("Password", text: $enteredPw)
             Button("Import") {
-                if let p = unlocking { if gmail.importPending(p, password: enteredPw, into: store) { unlocking = nil } else { unlockError = true } }
+                guard let p = unlocking else { return }
+                if let err = gmail.importPending(p, password: enteredPw, into: store) {
+                    unlockMessage = err.errorDescription
+                    // Only a wrong / still-locked password is worth retrying; any other error means the
+                    // statement opened but couldn't be parsed and has already left the queue.
+                    switch err { case .wrongPassword, .locked: break; default: unlocking = nil }
+                } else { unlocking = nil }
             }
             Button("Cancel", role: .cancel) { unlocking = nil }
-        } message: { Text(unlockError ? "Wrong password — try again." : "Enter the password for \(unlocking?.filename ?? "this statement").") }
+        } message: { Text(unlockMessage ?? "Enter the password for \(unlocking?.filename ?? "this statement").") }
     }
     @State private var refresh = false
     private func bump() { refresh.toggle() }

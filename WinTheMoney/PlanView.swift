@@ -1,13 +1,52 @@
 import SwiftUI
 import Charts
 
+/// The window the Plan screen reports over. Monthly is the default; the rest let the user review how a
+/// whole year (or year-to-date) went. Monthly navigation steps months; the others step years.
+enum PlanPeriodMode: String, CaseIterable, Identifiable {
+    case monthly = "Monthly", ytd = "YTD", fytd = "FYTD", calendarYear = "Year", financialYear = "FY"
+    var id: String { rawValue }
+    var full: String {
+        switch self {
+        case .monthly: return "Monthly"
+        case .ytd: return "Year to date"
+        case .fytd: return "Financial year to date"
+        case .calendarYear: return "Full calendar year"
+        case .financialYear: return "Financial year (Apr–Mar)"
+        }
+    }
+}
+
+/// A resolved reporting window: [start, end), how many months of budget it represents, and a title.
+struct PlanWindow {
+    var start: Date
+    var end: Date
+    var months: Int            // months of cap to compare actuals against (elapsed for to-date modes)
+    var title: String
+    var canGoForward: Bool     // false at the present period
+}
+
 struct PlanView: View {
     @EnvironmentObject var store: Store
     @State private var showAddCategory = false
     @State private var editingCategory: BudgetCategory?
+    @State private var mode: PlanPeriodMode = .monthly
+    @State private var offset = 0              // 0 = current; +1 = one period back (months if monthly, else years)
+    @State private var drill: CatDrill?
+
+    struct CatDrill: Identifiable { let id = UUID(); let name: String }
+
+    private var window: PlanWindow { Self.window(mode: mode, offset: offset) }
+    private func spent(_ c: BudgetCategory) -> Double { store.spend(inCategory: c.name, from: window.start, to: window.end) }
+    private func plan(_ c: BudgetCategory) -> Double { c.monthlyPlan * Double(window.months) }
+    private var periodSpent: Double { store.totalSpend(from: window.start, to: window.end) }
+    private var periodPlan: Double { store.categories.map(\.monthlyPlan).reduce(0, +) * Double(window.months) }
+    private var periodLeft: Double { periodPlan - periodSpent }
+    private var periodPct: Int { periodPlan > 0 ? Int((periodSpent / periodPlan * 100).rounded()) : 0 }
 
     var body: some View {
         VStack(spacing: 20) {
+            periodNav
             hero
             if store.txns.contains(where: { !$0.income }) {
                 VStack(alignment: .leading, spacing: 11) {
@@ -23,22 +62,20 @@ struct PlanView: View {
                                actionTitle: "Add category") { showAddCategory = true }
                 } else {
                     VStack(spacing: 9) {
-                        ForEach(store.categories) { c in
-                            Button { editingCategory = c } label: { CategoryRow(c: c) }.buttonStyle(.plain)
-                                .contextMenu {
-                                    Button { editingCategory = c } label: { Label("Edit", systemImage: "pencil") }
-                                    Button(role: .destructive) { store.remove(category: c) } label: { Label("Delete", systemImage: "trash") }
-                                }
-                        }
+                        ForEach(store.categories) { c in categoryRow(c) }
                     }
                 }
             }
         }
-        .navigationTitle("Monthly plan")
-        .navigationSubtitle("\(store.currentMonthName) \(Date().formatted(.dateTime.year()))")
+        .navigationTitle("Plan")
+        .navigationSubtitle(window.title)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Picker("Period", selection: $mode) {
+                        ForEach(PlanPeriodMode.allCases) { m in Text(m.full).tag(m) }
+                    }
+                    Divider()
                     Button { showAddCategory = true } label: { Label("Add category", systemImage: "plus") }
                     Button {
                         if BudgetLiveActivity.isRunning { BudgetLiveActivity.stop() }
@@ -49,29 +86,58 @@ struct PlanView: View {
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
+        .onChange(of: mode) { _, _ in offset = 0 }
         .sheet(isPresented: $showAddCategory) { AddCategorySheet() }
         .sheet(item: $editingCategory) { AddCategorySheet(editing: $0) }
+        .sheet(item: $drill) { d in
+            TransactionsSheet(category: d.name)
+        }
+    }
+
+    // MARK: period navigation (‹ June 2026 ›)
+    private var periodNav: some View {
+        HStack {
+            Button { offset += 1 } label: { navChevron("chevron.left") }
+            Spacer()
+            VStack(spacing: 1) {
+                Text(window.title).font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                Text(mode.full).font(.caption2).foregroundStyle(Zen.ink3)
+            }
+            Spacer()
+            Button { if window.canGoForward { offset -= 1 } } label: { navChevron("chevron.right") }
+                .disabled(!window.canGoForward).opacity(window.canGoForward ? 1 : 0.35)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10).zenCard(20)
+    }
+    private func navChevron(_ s: String) -> some View {
+        Image(systemName: s).font(.subheadline.weight(.bold)).foregroundStyle(Zen.accentDeep)
+            .frame(width: 34, height: 34).background(Circle().fill(Zen.accent.opacity(0.14)))
     }
 
     private var hero: some View {
         VStack(spacing: 0) {
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("SPENT SO FAR").font(.caption.weight(.semibold)).foregroundStyle(Zen.ink2)
-                    Text(INR.compact(store.spentTotal)).font(.system(size: 34, weight: .bold, design: .rounded)).foregroundStyle(Zen.ink)
-                    Text("of \(INR.compact(store.planTotal)) planned").font(.caption).foregroundStyle(Zen.ink3)
+                    Text("SPENT").font(.caption.weight(.semibold)).foregroundStyle(Zen.ink2)
+                    Text(INR.compact(periodSpent)).font(.system(size: 34, weight: .bold, design: .rounded)).foregroundStyle(Zen.ink)
+                    Text("of \(INR.compact(periodPlan)) planned").font(.caption).foregroundStyle(Zen.ink3)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text(INR.compact(store.planLeft)).font(.subheadline.weight(.bold)).foregroundStyle(Zen.greenDeep)
-                    Text("left to spend").font(.caption2).foregroundStyle(Zen.ink3)
+                    Text(INR.compact(abs(periodLeft))).font(.subheadline.weight(.bold)).foregroundStyle(periodLeft < 0 ? Zen.caution : Zen.greenDeep)
+                    Text(periodLeft < 0 ? "over budget" : "left to spend").font(.caption2).foregroundStyle(Zen.ink3)
                 }
             }
-            ZenBar(value: store.planTotal > 0 ? store.spentTotal/store.planTotal : 0, tint: AnyShapeStyle(Zen.calmGradient)).padding(.top, 14)
-            Text("\(store.planPct)% of budget used · \(store.daysLeftInMonth) days left in \(store.currentMonthName)")
-                .font(.caption2).foregroundStyle(Zen.ink3).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 7)
+            ZenBar(value: periodPlan > 0 ? periodSpent / periodPlan : 0, tint: AnyShapeStyle(Zen.calmGradient)).padding(.top, 14)
+            Text(heroCaption).font(.caption2).foregroundStyle(Zen.ink3).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 7)
         }
         .padding(20).zenCard(28)
+    }
+    private var heroCaption: String {
+        if mode == .monthly && offset == 0 {
+            return "\(periodPct)% of budget used · \(store.daysLeftInMonth) days left in \(store.currentMonthName)"
+        }
+        return "\(periodPct)% of budget used · \(window.months) month\(window.months == 1 ? "" : "s") · \(window.title)"
     }
 
     private var barChart: some View {
@@ -98,10 +164,67 @@ struct PlanView: View {
         .padding(18).zenCard(26)
     }
 
+    @ViewBuilder private func categoryRow(_ c: BudgetCategory) -> some View {
+        HStack(spacing: 8) {
+            Button { editingCategory = c } label: {
+                CategoryRow(c: c, spentOverride: spent(c), planOverride: plan(c),
+                            periodNoun: mode == .monthly ? nil : "period")
+            }.buttonStyle(.plain)
+            Button { drill = .init(name: c.name) } label: {
+                Image(systemName: "list.bullet").font(.subheadline.weight(.semibold)).foregroundStyle(Zen.accentDeep)
+                    .frame(width: 42, height: 42).background(Circle().fill(Zen.accent.opacity(0.14)))
+            }.buttonStyle(.plain).accessibilityLabel("View \(c.name) transactions")
+        }
+        .contextMenu {
+            Button { editingCategory = c } label: { Label("Edit", systemImage: "pencil") }
+            Button { drill = .init(name: c.name) } label: { Label("View transactions", systemImage: "list.bullet") }
+            Button(role: .destructive) { store.remove(category: c) } label: { Label("Delete", systemImage: "trash") }
+        }
+    }
+
     private func legend(_ c: Color, _ t: String) -> some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 3).fill(c).frame(width: 10, height: 10)
             Text(t).font(.caption.weight(.semibold)).foregroundStyle(Zen.ink2)
+        }
+    }
+
+    // MARK: window resolution
+    static func window(mode: PlanPeriodMode, offset: Int) -> PlanWindow {
+        let cal = Calendar.current, now = Date()
+        func endOfToday() -> Date { cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now }
+        switch mode {
+        case .monthly:
+            let base = cal.date(byAdding: .month, value: -offset, to: now) ?? now
+            let start = cal.dateInterval(of: .month, for: base)?.start ?? base
+            let end = cal.date(byAdding: .month, value: 1, to: start) ?? base
+            return PlanWindow(start: start, end: end, months: 1,
+                              title: start.formatted(.dateTime.month(.wide).year()), canGoForward: offset > 0)
+        case .ytd:
+            let year = cal.component(.year, from: now) - offset
+            let start = cal.date(from: DateComponents(year: year, month: 1, day: 1)) ?? now
+            let isCurrent = offset == 0
+            let end = isCurrent ? endOfToday() : (cal.date(from: DateComponents(year: year + 1, month: 1, day: 1)) ?? now)
+            let months = isCurrent ? cal.component(.month, from: now) : 12
+            return PlanWindow(start: start, end: end, months: months, title: "\(year) · year to date", canGoForward: offset > 0)
+        case .fytd:
+            let start = cal.date(byAdding: .year, value: -offset, to: Store.financialYearStart(now)) ?? now
+            let isCurrent = offset == 0
+            let fullEnd = cal.date(byAdding: .year, value: 1, to: start) ?? now
+            let end = isCurrent ? endOfToday() : fullEnd
+            let months = isCurrent ? max(1, (cal.dateComponents([.month], from: start, to: now).month ?? 0) + 1) : 12
+            let sy = cal.component(.year, from: start) % 100
+            return PlanWindow(start: start, end: end, months: months, title: "FY \(sy)–\(sy + 1) · to date", canGoForward: offset > 0)
+        case .calendarYear:
+            let year = cal.component(.year, from: now) - offset
+            let start = cal.date(from: DateComponents(year: year, month: 1, day: 1)) ?? now
+            let end = cal.date(from: DateComponents(year: year + 1, month: 1, day: 1)) ?? now
+            return PlanWindow(start: start, end: end, months: 12, title: "\(year)", canGoForward: offset > 0)
+        case .financialYear:
+            let start = cal.date(byAdding: .year, value: -offset, to: Store.financialYearStart(now)) ?? now
+            let end = cal.date(byAdding: .year, value: 1, to: start) ?? now
+            let sy = cal.component(.year, from: start) % 100
+            return PlanWindow(start: start, end: end, months: 12, title: "FY \(sy)–\(sy + 1)", canGoForward: offset > 0)
         }
     }
 }

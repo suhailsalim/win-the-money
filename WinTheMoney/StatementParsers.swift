@@ -24,6 +24,11 @@ enum StatementParser {
     /// bogus txns. Each marker below is loan-closure-specific and never appears in a
     /// savings / current / credit-card statement, so a single hit is conclusive.
     static func isLoanClosureStatement(_ text: String) -> Bool {
+        // A real foreclosure/pre-payment statement is *about* closing a loan. A credit-card or
+        // combined bank statement can legitimately carry "pre-closure"/"principal outstanding" inside
+        // a Merchant EMI / loan-summary block (HDFC prints one for any card with an active EMI) — those
+        // are genuine statements, so never reject them here, or they get stuck "needs password".
+        if CardStatementParser.isCardStatement(text) || isCombinedHDFC(text) { return false }
         let t = text.lowercased()
         let markers = [
             "foreclosure", "fore closure", "fore-closure",

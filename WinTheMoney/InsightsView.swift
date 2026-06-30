@@ -17,6 +17,7 @@ struct InsightsView: View {
                     periodChips
                     AIInsightsCard()
                     tagCard
+                    intlRewardsCard
                     brandCard
                     trendCard
                 }
@@ -68,6 +69,51 @@ struct InsightsView: View {
                             }
                         }
                     }
+                }
+            }
+        }
+        .padding(18).frame(maxWidth: .infinity, alignment: .leading).zenCard(26)
+    }
+
+    // MARK: international spend + card rewards
+    private var intlRewardsCard: some View {
+        let intl = store.internationalSpend(months: months)
+        let rewards = store.rewardsEarned(months: months)
+        return VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "International & rewards")
+            if intl.count == 0 && rewards.isEmpty {
+                Text("No international spend or card rewards in this period.").font(.caption).foregroundStyle(Zen.ink3)
+            } else {
+                if intl.count > 0 {
+                    HStack {
+                        Label("International spend", systemImage: "globe").font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                        Spacer()
+                        Text(INR.compact(intl.total)).font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                    }
+                    if !intl.byCurrency.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(intl.byCurrency, id: \.currency) { c in
+                                    Text("\(c.currency) · \(INR.compact(c.amount))").font(.caption2.weight(.semibold))
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .background(Capsule().fill(Zen.accent.opacity(0.14))).foregroundStyle(Zen.accentDeep)
+                                }
+                            }
+                        }
+                    }
+                    Text("\(intl.count) transaction\(intl.count == 1 ? "" : "s") abroad").font(.caption2).foregroundStyle(Zen.ink3)
+                }
+                if !rewards.isEmpty {
+                    if intl.count > 0 { Divider().opacity(0.4) }
+                    ForEach(rewards, id: \.currency) { r in
+                        HStack {
+                            Label(r.currency, systemImage: "star.fill").font(.subheadline.weight(.semibold)).foregroundStyle(Zen.greenDeep)
+                            Spacer()
+                            Text("+\(NumberFormatter.localizedString(from: NSNumber(value: r.total), number: .decimal))")
+                                .font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                        }
+                    }
+                    Text("Rewards earned this period").font(.caption2).foregroundStyle(Zen.ink3)
                 }
             }
         }
