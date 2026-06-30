@@ -52,6 +52,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 | UI shared | `Sheets.swift`, `Components.swift`, `Theme.swift`, `AccountsView.swift` |
 | Statement PDFs | `StatementImporter.swift`, `StatementParsers.swift`, `CardStatementParser.swift`, `PDFTableReader.swift`, `SpreadsheetImporter.swift`, `StatementVault.swift`, `StatementBackground.swift` |
 | Gmail | `GmailManager.swift`, `GmailProvider.swift`, `GmailBackground.swift`, `EmailTransactionParser.swift` |
+| Income & tax | `TaxEngine.swift` (slab estimate, both regimes), `PayslipParser.swift`, `IncomeView.swift` |
+| AI (opt-in) | `AI.swift` (multi-provider `AIManager`), `AIInsights.swift` (aggregate summary), `AIView.swift` |
 | Categorisation | `BrandCatalog.swift` (+ `Store.classify` / `recategorizeAll`) |
 | Catalogs | `BankCatalog.swift`, `CardCatalog.swift`, `MarketCatalog.swift` |
 | Investments / market | `QuoteProvider.swift`, `FXProvider.swift` |
