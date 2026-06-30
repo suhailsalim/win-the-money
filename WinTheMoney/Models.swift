@@ -16,15 +16,36 @@ enum Tab: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Budget cap period
+/// The window a category's `plan` (cap) applies over. Most spends are monthly, but some — insurance,
+/// subscriptions billed yearly, school fees — are naturally quarterly / annual / custom-length.
+enum BudgetPeriod: String, Codable, CaseIterable, Identifiable {
+    case monthly, quarterly, annual, custom
+    var id: String { rawValue }
+    /// Cycle length in months (custom is handled via `BudgetCategory.customMonths`).
+    var months: Int { switch self { case .monthly: 1; case .quarterly: 3; case .annual: 12; case .custom: 1 } }
+    var label: String { switch self { case .monthly: "Monthly"; case .quarterly: "Quarterly"; case .annual: "Annual"; case .custom: "Custom" } }
+    /// Short noun for "this <noun>" / "per <noun>".
+    var noun: String { switch self { case .monthly: "month"; case .quarterly: "quarter"; case .annual: "year"; case .custom: "period" } }
+}
+
 // MARK: - Category (budget)
 struct BudgetCategory: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
     var symbol: String        // SF Symbol
-    var spent: Double
-    var plan: Double
+    var spent: Double         // recomputed: spend within the current cap cycle (see Store.recomputeSpent)
+    var plan: Double          // the cap, expressed per cycle (e.g. ₹24,000 / year for annual insurance)
     var color: String         // hex for icon tint
     var isSystem: Bool = false // a maintained base category — can't be deleted/renamed
+    var period: BudgetPeriod = .monthly   // window the cap applies over
+    var customMonths: Int = 1             // cycle length when period == .custom
+    var anchor: Date? = nil               // cycle start (e.g. insurance renewal); nil → financial-year start
+
+    /// Effective cycle length in months (≥ 1).
+    var periodMonths: Int { period == .custom ? max(1, customMonths) : period.months }
+    /// The cap normalised to a per-month figure, so non-monthly caps still fold into the monthly overview.
+    var monthlyPlan: Double { plan / Double(periodMonths) }
 
     var pct: Double { plan > 0 ? spent / plan : 0 }
     var left: Double { plan - spent }
