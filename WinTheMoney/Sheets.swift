@@ -786,6 +786,7 @@ struct SettingsSheet: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var gmail: GmailManager
     @EnvironmentObject var sync: SyncManager
+    @EnvironmentObject var ai: AIManager
     @Environment(\.dismiss) private var dismiss
     @State private var showExportJSON = false
     @State private var showExportCSV = false
@@ -839,7 +840,7 @@ struct SettingsSheet: View {
 
     /// Full wipe: store data + preferences, Gmail account/statements, and Setu credentials.
     private func performClear() {
-        store.clearAll(); gmail.reset(); sync.reset(); message = "All data cleared"
+        store.clearAll(); gmail.reset(); sync.reset(); ai.reset(); message = "All data cleared"
     }
 
     @ViewBuilder private var profileHeader: some View {
@@ -875,6 +876,7 @@ struct SettingsSheet: View {
             NavigationLink { MerchantsView() } label: { Label("Merchants & rules", systemImage: "tag") }
             Button { store.recategorizeAll(); message = "Re-scanned categories" } label: { Label("Re-scan categories", systemImage: "wand.and.stars") }
             NavigationLink { GmailSettingsView() } label: { Label("Email auto-import · Gmail", systemImage: "envelope.badge") }
+            NavigationLink { AISettingsView() } label: { Label("AI insights & providers", systemImage: "sparkles") }
             Toggle(isOn: $store.accountAggregatorEnabled) { Label("Account Aggregator (Setu)", systemImage: "building.columns") }
             if store.accountAggregatorEnabled {
                 NavigationLink { BankSyncSettingsView() } label: { Label("Bank sync settings", systemImage: "gearshape") }
