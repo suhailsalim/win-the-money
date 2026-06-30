@@ -2,13 +2,15 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var gmail: GmailManager
     @State private var sheet: HomeSheet?
 
-    enum HomeSheet: Identifiable { case settings, txns, upload, accounts
+    enum HomeSheet: Identifiable { case settings, txns, upload, accounts, statements
         var id: Int { hashValue } }
 
     var body: some View {
         VStack(spacing: 22) {
+            if !gmail.pending.isEmpty { pendingBanner }
             hero
             statRow
 
@@ -61,8 +63,30 @@ struct HomeView: View {
             case .txns: TransactionsSheet()
             case .upload: UploadSheet()
             case .accounts: AccountsView()
+            case .statements: NavigationStack { StatementsEmailView() }
             }
         }
+    }
+
+    // MARK: pending statements banner — locked PDFs (e.g. password-protected Federal/Scapia
+    // statements) wait silently until unlocked; surface them so an account never goes missing.
+    private var pendingBanner: some View {
+        Button { sheet = .statements } label: {
+            HStack(spacing: 12) {
+                IconChip(symbol: "lock.doc", tint: Zen.caution)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(gmail.pending.count) statement\(gmail.pending.count == 1 ? "" : "s") need a password")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                    Text("Tap to unlock and import — your accounts won't show until then")
+                        .font(.caption2).foregroundStyle(Zen.ink2).lineLimit(2)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Zen.ink3)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .zenCard(tinted: Zen.caution, 20)
+        }.buttonStyle(.plain)
     }
 
     // generic titled section

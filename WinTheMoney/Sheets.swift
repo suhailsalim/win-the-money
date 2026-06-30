@@ -955,6 +955,8 @@ struct GmailSettingsView: View {
                     Label("Gmail connected", systemImage: "checkmark.seal.fill").foregroundStyle(Zen.greenDeep)
                     Button { gmail.scan(into: store) } label: { Label("Scan emails now", systemImage: "envelope.arrow.triangle.branch") }
                         .disabled(gmail.isWorking)
+                    Button { gmail.rescanAll(into: store) } label: { Label("Re-scan all emails", systemImage: "arrow.clockwise") }
+                        .disabled(gmail.isWorking)
                     Button(role: .destructive) { gmail.disconnect() } label: { Label("Disconnect", systemImage: "xmark.circle") }
                 } else {
                     Button { gmail.connect() } label: { Label("Connect Gmail", systemImage: "envelope.badge") }
@@ -971,7 +973,7 @@ struct GmailSettingsView: View {
                 }.onChange(of: gmail.scanDays) { _, _ in gmail.saveConfig() }
                 if let d = gmail.lastScan { LabeledContent("Last scan", value: d.formatted(date: .abbreviated, time: .shortened)) }
             } header: { Text("Scan window") } footer: {
-                Text("Auto-scan refreshes on app open and periodically in the background (about once a day, when iOS allows).")
+                Text("Auto-scan refreshes on app open (hourly at most) and periodically in the background when iOS allows. Already-scanned emails are skipped, so re-scans are quick. Use “Re-scan all” to re-read everything in the window.")
             }
 
             Section {

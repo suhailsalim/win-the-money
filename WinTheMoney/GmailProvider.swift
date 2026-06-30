@@ -20,7 +20,11 @@ enum GmailProvider {
         "OR \"Transaction Amount\" OR \"Credit Card\")"
     }
 
-    static func fetchTransactions(accessToken: String, days: Int) async throws -> (txns: [SyncedTxn], balances: [BalanceUpdate]) {
+    /// Lists matching alert emails and parses the ones not already seen. `skip` holds message ids
+    /// from a previous scan (the processed-message ledger) so we don't re-download their bodies.
+    /// `scanned` is the ids actually fetched this run (caller adds them to the ledger).
+    static func fetchTransactions(accessToken: String, days: Int, skip: Set<String> = []) async throws
+        -> (txns: [SyncedTxn], balances: [BalanceUpdate], scanned: [String]) {
         var ids: [String] = []
         var pageToken: String?
         repeat {
@@ -34,9 +38,11 @@ enum GmailProvider {
 
         var out: [SyncedTxn] = []
         var balances: [BalanceUpdate] = []
-        for id in ids {
+        var scanned: [String] = []
+        for id in ids where !skip.contains(id) {
             guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/\(id)?format=full"),
                   let msg = try? await get(url, accessToken) as? [String: Any] else { continue }
+            scanned.append(id)   // only mark ids we actually fetched, so transient failures retry next scan
             let payload = msg["payload"] as? [String: Any] ?? [:]
             let headers = payload["headers"] as? [[String: Any]] ?? []
             func h(_ n: String) -> String { headers.first { ($0["name"] as? String)?.lowercased() == n.lowercased() }?["value"] as? String ?? "" }
@@ -45,7 +51,7 @@ enum GmailProvider {
             if let t = EmailTransactionParser.parse(src) { out.append(t) }
             else if let b = EmailTransactionParser.balance(src) { balances.append(b) }
         }
-        return (out, balances)
+        return (out, balances, scanned)
     }
 
     // MARK: statement PDFs (attachments)
