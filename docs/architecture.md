@@ -22,7 +22,8 @@ plus profile/settings (`userName, netWorthTarget, preferStatementImport, account
 
 ## Store: representative responsibilities
 
-- **Derived totals**: `liquidNetWorth`, investments total, per-category `spent`, card outstanding, etc.
+- **Derived totals**: `liquidNetWorth`, investments total, per-category `spent`, card outstanding,
+  live bank balance (`recomputeBankBalances`: anchor + transactions after `balanceAsOf`), etc.
 - **Transactions**: `add`, `classify(merchant:counterparty:narration:income:)`, `recategorizeAll()`,
   `mergeImport(_:)`, `mergeSynced(accounts:txns:)`, `mergeStatement(account:txns:)`, `applyBalances(_:)`.
 - **Accounts**: `upsertAccount`, `mergeDeposits(_:)` (upsert by identifier), `dedupeAccountNames`.

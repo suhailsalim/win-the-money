@@ -39,6 +39,10 @@ HDFC, Federal, combined), `CardStatementParser.swift` (credit-card statements), 
 - Transactions dedup by stable `externalId` (e.g. `fed:<tranId>:<bal>`, `hdfc:…`, `cc:…`).
 - Accounts upsert by `mask`; deposits upsert by `identifier`.
 - Gmail re-scans are gated by a processed-statement ledger (see [integrations.md](integrations.md)).
+- A statement's closing balance becomes a dated **balance anchor** (`SyncedAccount.asOf`), not a raw
+  overwrite — the live balance is then derived as `anchor + Σ(later txns)` and only the newest reading
+  per account wins, so an old statement never clobbers a newer Gmail "available balance" alert. See
+  [accounts-cards-deposits.md](accounts-cards-deposits.md#balance-anchors-iron-clad-reconstruction).
 
 ## Adding a new bank/card parser
 

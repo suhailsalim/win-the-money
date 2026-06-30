@@ -99,7 +99,7 @@ struct CardCoverView: View {
                     }
                 }
                 HStack(alignment: .firstTextBaseline) {
-                    Text("\(INR.compact(card.outstanding)) of \(INR.compact(card.limit))").font(.caption.weight(.semibold))
+                    Text(card.limit > 0 ? "\(INR.compact(card.outstanding)) of \(INR.compact(card.limit))" : INR.compact(card.outstanding)).font(.caption.weight(.semibold))
                     Spacer()
                     if let t = card.tier { Text(t).font(.caption2.weight(.bold)).textCase(.uppercase).opacity(0.85) }
                 }

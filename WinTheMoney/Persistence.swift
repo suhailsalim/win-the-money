@@ -72,7 +72,7 @@ extension Txn {
 
 // MARK: BankAccount
 extension BankAccount {
-    enum CodingKeys: String, CodingKey { case id, name, logo, colorHex, type, mask, balance, bankCode, ifsc, branch, tier, imageRef }
+    enum CodingKeys: String, CodingKey { case id, name, logo, colorHex, type, mask, balance, bankCode, ifsc, branch, tier, imageRef, balanceAnchor, balanceAsOf }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.decode(.id, default: UUID())
@@ -87,6 +87,8 @@ extension BankAccount {
         branch = c.decode(.branch, default: nil)
         tier = c.decode(.tier, default: nil)
         imageRef = c.decode(.imageRef, default: nil)
+        balanceAnchor = c.decode(.balanceAnchor, default: nil)
+        balanceAsOf = c.decode(.balanceAsOf, default: nil)
     }
 }
 
@@ -99,7 +101,7 @@ extension CreditCard {
         name = c.decode(.name, default: "")
         mask = c.decode(.mask, default: "0000")
         outstanding = c.decode(.outstanding, default: 0)
-        limit = c.decode(.limit, default: 1)
+        limit = c.decode(.limit, default: 0)
         bankCode = c.decode(.bankCode, default: nil)
         network = c.decode(.network, default: nil)
         tier = c.decode(.tier, default: nil)

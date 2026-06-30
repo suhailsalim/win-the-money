@@ -108,6 +108,13 @@ struct BankAccount: Identifiable, Codable, Hashable {
     var branch: String? = nil
     var tier: String? = nil
     var imageRef: String? = nil   // user-supplied logo (file name in Documents or URL)
+    /// Balance reconstruction anchor: the last authoritative reading (`balanceAnchor`) and the moment
+    /// it was true (`balanceAsOf`, normalised to end-of-day). The displayed `balance` is always
+    /// *derived* = balanceAnchor + Σ(txn.amount for txns dated after balanceAsOf), so the latest
+    /// reading always wins and a missed/duplicate txn can't permanently corrupt the figure.
+    /// nil ⇒ no anchor yet (manual / AA accounts) — `balance` is then used verbatim.
+    var balanceAnchor: Double? = nil
+    var balanceAsOf: Date? = nil
 }
 
 // MARK: - Credit card

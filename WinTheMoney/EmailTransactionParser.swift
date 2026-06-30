@@ -64,12 +64,29 @@ enum EmailTransactionParser {
         return nil
     }
 
-    /// An exact account balance from an HDFC "available balance" email.
+    /// An exact account balance from an HDFC "available balance" email — captures the "as of <date>"
+    /// so the newest reading can win and the live balance can be reconstructed from it.
     static func balance(_ src: Source) -> BalanceUpdate? {
         let text = htmlToText(src.body)
-        guard let g = cap(#"available balance in your account ending\s+[Xx]*(\d+)\s+is\s+Rs\.?\s*(?:INR)?\s*([\d,]+(?:\.\d{1,2})?)"#, text, 2),
+        guard let g = cap(#"available balance in your account ending\s+[Xx]*(\d+)\s+is\s+Rs\.?\s*(?:INR)?\s*([\d,]+(?:\.\d{1,2})?)(?:\s+as of\s+(\d{1,2}-[A-Za-z]{3,9}-\d{2,4}))?"#, text, 3),
               let v = money(g[2]) else { return nil }
-        return BalanceUpdate(mask: String(g[1].suffix(4)), balance: v, kind: .bank)
+        // Prefer the email's explicit "as of <date>" (pinned to end-of-day); else the send time.
+        let asOf = balanceDate(g[3]) ?? rfcDate(src.dateHeader)
+        return BalanceUpdate(mask: String(g[1].suffix(4)), balance: v, kind: .bank, asOf: asOf)
+    }
+
+    /// Parse a "29-JUN-26"/"29-JUN-2026" balance date and pin it to end-of-day, so same-day
+    /// transactions (stamped at midnight) are treated as already included in the reading.
+    private static func balanceDate(_ s: String) -> Date? {
+        let t = s.trimmingCharacters(in: .whitespaces); guard !t.isEmpty else { return nil }
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        for fmt in ["dd-MMM-yy", "dd-MMM-yyyy", "d-MMM-yy", "d-MMM-yyyy"] {
+            f.dateFormat = fmt
+            if let d = f.date(from: t) {
+                return Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: d) ?? d
+            }
+        }
+        return nil
     }
 
     private static func make(_ src: Source, mask: String, amount: String, credit: Bool,
