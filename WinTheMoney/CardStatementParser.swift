@@ -116,6 +116,7 @@ enum CardStatementParser {
     private static func parseAxis(_ text: String) -> (SyncedAccount, [SyncedTxn]) {
         let mask = cap(#"(?:Credit Card Number|Card No:?)\s*\d{6}\*+(\d{4})"#, text) ?? cap(#"\*{2,}(\d{4})"#, text) ?? ""
         let limit = cap(#"Credit Limit\s+([\d,]+\.\d{2})\s+Available"#, text).flatMap(money)
+        let availLimit = cap(#"Available Credit Limit\s+([\d,]+\.\d{2})"#, text).flatMap(money)
         let due = lastMoney(#"Total Payment Due[\s\S]{0,90}?\n\s*([\d,]+\.\d{2})"#, text, lazyFirst: true)
         let product = pickProduct(.axis, text)
         var txns: [SyncedTxn] = []
@@ -139,7 +140,7 @@ enum CardStatementParser {
                            forexCurrency: fx?.currency, forexAmount: fx?.amount, isInternational: fx != nil))
         }
         let rw = reward("Miles", #"eDGE MILES[\s\S]{0,600}?([\d,]{3,})\s+\d{2}-\d{2}-\d{4}"#, text)
-        return (cardAccount(.axis, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
+        return (cardAccount(.axis, mask: mask, due: due, limit: limit, product: product, reward: rw, availableLimit: availLimit), txns)
     }
 
     /// Axis prints an MCC "MERCHANT CATEGORY" column as the trailing word(s) of each spend row (before
@@ -276,10 +277,14 @@ enum CardStatementParser {
 
     // MARK: - shared builders
     private static func cardAccount(_ issuer: Issuer, mask: String, due: Double?, limit: Double?,
-                                    product: String?, reward: (String, Double)? = nil) -> SyncedAccount {
+                                    product: String?, reward: (String, Double)? = nil,
+                                    availableLimit: Double? = nil) -> SyncedAccount {
         let code = issuer == .generic ? nil : issuer.rawValue
+        // Fallback: if the printed total limit is missing, derive it from available limit + outstanding
+        // (total = available + spent). Keeps the card's limit populated across label variations.
+        let resolvedLimit = limit ?? availableLimit.flatMap { av in due.map { av + $0 } }
         return SyncedAccount(bank: BankCatalog.info(code)?.name ?? "Card", mask: mask, type: "Credit card",
-                             balance: due ?? 0, kind: .card, bankCode: code, limit: limit, cardName: product,
+                             balance: due ?? 0, kind: .card, bankCode: code, limit: resolvedLimit, cardName: product,
                              rewardKind: reward?.0, rewardBalance: reward?.1)
     }
     private static func reward(_ kind: String, _ pattern: String, _ text: String) -> (String, Double)? {

@@ -276,6 +276,7 @@ final class Store: ObservableObject {
     /// `spent` is the net spend within *its own* current cap cycle (monthly by default, but a
     /// quarterly/annual/custom cap counts spend over that whole window — e.g. a yearly insurance cap).
     func recomputeSpent() {
+        recomputeBankBalances()   // any change to txns can move an anchored account's live balance
         for i in categories.indices {
             let (start, end) = cycleWindow(for: categories[i])
             let name = categories[i].name
@@ -356,7 +357,7 @@ final class Store: ObservableObject {
     // MARK: manual ingestion
     func addGoal(_ g: Goal) { goals.insert(g, at: 0); save() }
     func addDeposit(_ d: Deposit) { deposits.append(d); recomputeGoalProgress(); save() }
-    func addBank(_ b: BankAccount) { banks.append(b); save() }
+    func addBank(_ b: BankAccount) { banks.append(b); recomputeBankBalances(); save() }
     func addCard(_ c: CreditCard) { cards.append(c); save() }
     func addCategory(_ c: BudgetCategory) { categories.append(c); save() }
     func addIncomeStream(_ s: IncomeStream) { incomeStreams.append(s); save() }
@@ -404,6 +405,7 @@ final class Store: ObservableObject {
         let oldName = banks[i].name
         banks[i] = b
         if oldName != b.name { for j in txns.indices where txns[j].account == oldName { txns[j].account = b.name } }
+        recomputeBankBalances()   // re-derive in case the manual edit re-anchored the balance
         recomputeGoalProgress()
         save()
     }
@@ -616,8 +618,13 @@ final class Store: ObservableObject {
             txns.insert(t, at: 0)
             registerConflicts(for: s, txnId: t.id, recordId: statementRecordId)
             if adjustBalances {
-                if s.source == .bank, let bi = banks.firstIndex(where: { $0.mask == s.accountMask }) { banks[bi].balance += s.amount }
-                else if s.source == .card, let ci = cards.firstIndex(where: { $0.mask == s.accountMask }) { cards[ci].outstanding = max(0, cards[ci].outstanding - s.amount) }
+                // Anchored accounts re-derive from (anchor + later txns) in recomputeBankBalances()
+                // below — adding here too would double-count. Only un-anchored accounts run a balance.
+                if s.source == .bank, let bi = banks.firstIndex(where: { $0.mask == s.accountMask }) {
+                    if banks[bi].balanceAnchor == nil { banks[bi].balance += s.amount }
+                } else if s.source == .card, let ci = cards.firstIndex(where: { $0.mask == s.accountMask }) {
+                    cards[ci].outstanding = max(0, cards[ci].outstanding - s.amount)
+                }
             }
             added += 1
         }
@@ -708,6 +715,34 @@ final class Store: ObservableObject {
         guard let asOf else { return statedBalance }
         let later = txns.filter { $0.account == accountName && $0.date > asOf }.map(\.amount).reduce(0, +)
         return statedBalance + later
+    }
+
+    // MARK: - Balance anchors (iron-clad reconstruction)
+    // The displayed `balance` of an anchored account is always *derived*: the last authoritative
+    // reading (`balanceAnchor` as of `balanceAsOf`) plus every transaction dated after it. This makes
+    // the figure self-healing (a missed/duplicate txn can't permanently corrupt a running total) and
+    // order-independent (the newest reading always wins).
+
+    /// Reconstruct an anchored account's live balance; un-anchored accounts keep their stored balance.
+    private func derivedBalance(_ b: BankAccount) -> Double {
+        guard let anchor = b.balanceAnchor, let asOf = b.balanceAsOf else { return b.balance }
+        return liveBalance(statedBalance: anchor, asOf: asOf, accountName: b.name)
+    }
+    /// Adopt an authoritative balance reading for an account. Only advances the anchor *forward* in
+    /// time, so a stale statement/email can never clobber a newer reading; then re-derives the balance.
+    private func setBalanceAnchor(mask: String, balance: Double, asOf: Date) {
+        guard let i = banks.firstIndex(where: { $0.mask == mask }) else { return }
+        if let prev = banks[i].balanceAsOf, asOf < prev { return }   // keep the newer reading
+        banks[i].balanceAnchor = balance
+        banks[i].balanceAsOf = asOf
+        banks[i].balance = derivedBalance(banks[i])
+    }
+    /// Re-derive every anchored account's displayed balance. Idempotent — safe to call after any
+    /// change to `txns`, which is what makes the balance self-healing.
+    func recomputeBankBalances() {
+        for i in banks.indices where banks[i].balanceAnchor != nil {
+            banks[i].balance = derivedBalance(banks[i])
+        }
     }
 
     /// Finds an existing transaction that is the same real-world event as `s` regardless of merchant
@@ -830,12 +865,17 @@ final class Store: ObservableObject {
         if !s.merchantResolved { add("merchant", "No merchant or description was found for this transaction.") }
     }
 
-    /// Set exact balances from authoritative signals (e.g. HDFC "available balance" emails).
+    /// Set exact balances from authoritative signals (e.g. HDFC "available balance" emails). Each
+    /// reading is an anchor `(balance, asOf)`: we keep only the **newest** reading per account, so
+    /// Gmail's fetch order or a rescan of older daily emails can never let a stale value win.
     func applyBalances(_ updates: [BalanceUpdate]) {
         guard !updates.isEmpty else { return }
+        var latest: [String: BalanceUpdate] = [:]
         for u in updates where u.kind == .bank {
-            if let i = banks.firstIndex(where: { $0.mask == u.mask }) { banks[i].balance = u.balance }
+            if let cur = latest[u.mask], cur.asOf >= u.asOf { continue }
+            latest[u.mask] = u
         }
+        for u in latest.values { setBalanceAnchor(mask: u.mask, balance: u.balance, asOf: u.asOf) }
         recomputeGoalProgress()
         save()
     }
@@ -866,9 +906,13 @@ final class Store: ObservableObject {
             return
         }
         if let i = banks.firstIndex(where: { $0.mask == a.mask }) {
-            // A statement's closing balance is stated *as of* its period end. Don't clobber a newer
-            // live balance with it — reconstruct by adding transactions dated after the statement.
-            if a.balance != 0 { banks[i].balance = liveBalance(statedBalance: a.balance, asOf: a.asOf, accountName: banks[i].name) }
+            // A statement's closing balance is stated *as of* its period end. Route it through the
+            // anchor so it only wins if it's newer than the current reading, and the live balance is
+            // reconstructed from any transactions dated after it (never clobbers a newer Gmail alert).
+            if a.balance != 0 {
+                if let asOf = a.asOf { setBalanceAnchor(mask: a.mask, balance: a.balance, asOf: asOf) }
+                else { banks[i].balance = a.balance }   // no as-of date → take it verbatim (legacy)
+            }
             if banks[i].bankCode == nil { banks[i].bankCode = a.bankCode }
             if banks[i].ifsc == nil { banks[i].ifsc = a.ifsc }
             if banks[i].branch == nil { banks[i].branch = a.branch }
@@ -880,6 +924,9 @@ final class Store: ObservableObject {
             banks.append(BankAccount(name: "\(base) ••\(a.mask)", logo: info?.code ?? Self.shortLogo(a.bank),
                                      colorHex: info?.colorHex ?? "4F7FC4", type: a.type, mask: a.mask, balance: a.balance,
                                      bankCode: info?.code ?? a.bankCode, ifsc: a.ifsc, branch: a.branch, tier: a.tier))
+            // Anchor a freshly-created account too, so post-period transactions (already ingested from
+            // alerts) are reconstructed onto the statement closing rather than being silently dropped.
+            if a.balance != 0, let asOf = a.asOf { setBalanceAnchor(mask: a.mask, balance: a.balance, asOf: asOf) }
         }
     }
     private func ensureBank(mask: String, bankCode: String?) {

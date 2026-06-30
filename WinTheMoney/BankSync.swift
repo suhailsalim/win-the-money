@@ -46,8 +46,10 @@ struct SyncedTxn: Hashable {
     var hasConflict: Bool { !(dateResolved && amountResolved && merchantResolved) }
 }
 
-/// An exact balance reading (e.g. from an HDFC "available balance" email).
-struct BalanceUpdate: Hashable { var mask: String; var balance: Double; var kind: TxnSource = .bank }
+/// An exact balance reading (e.g. from an HDFC "available balance" email). `asOf` is *when* the
+/// balance was true (end-of-day) — used to keep only the newest reading per account and to
+/// reconstruct the live balance by adding transactions dated after it.
+struct BalanceUpdate: Hashable { var mask: String; var balance: Double; var kind: TxnSource = .bank; var asOf: Date }
 
 /// Result of parsing a statement PDF — one or many accounts/cards, their transactions, and
 /// any fixed/recurring deposits (combined statements).

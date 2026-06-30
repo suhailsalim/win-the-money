@@ -1392,12 +1392,15 @@ struct AddBankSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(editing == nil ? "Add" : "Save") {
                         let info = BankCatalog.info(bankCode)
+                        // A manual balance is the user asserting "this is my balance right now", so
+                        // anchor it to now — future alert transactions then build on it.
                         let b = BankAccount(id: editing?.id ?? UUID(), name: name.isEmpty ? "Account" : name,
                                             logo: info?.code ?? String(name.prefix(4)).uppercased(),
                                             colorHex: info?.colorHex ?? editing?.colorHex ?? "4F7FC4",
                                             type: type, mask: String(mask.suffix(4)), balance: balance,
                                             bankCode: bankCode, ifsc: editing?.ifsc, branch: editing?.branch,
-                                            tier: editing?.tier, imageRef: imageRef)
+                                            tier: editing?.tier, imageRef: imageRef,
+                                            balanceAnchor: balance, balanceAsOf: Date())
                         if editing == nil { store.addBank(b) } else { store.update(b) }
                         dismiss()
                     }.fontWeight(.semibold)
