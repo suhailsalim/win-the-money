@@ -4,7 +4,7 @@ import Vision
 import UIKit
 
 enum StatementError: LocalizedError {
-    case cannotOpen, locked, wrongPassword, noText, noTransactions
+    case cannotOpen, locked, wrongPassword, noText, noTransactions, unsupportedDocument
     var errorDescription: String? {
         switch self {
         case .cannotOpen: return "Couldn't open that PDF."
@@ -12,6 +12,7 @@ enum StatementError: LocalizedError {
         case .wrongPassword: return "Wrong password — try again."
         case .noText: return "No readable text found (it may be a scanned image)."
         case .noTransactions: return "Couldn't find any transactions in this statement."
+        case .unsupportedDocument: return "This looks like a loan foreclosure / pre-payment statement, not an account or card statement — its payable amounts aren't transactions, so it wasn't imported."
         }
     }
 }
@@ -38,6 +39,16 @@ enum StatementImporter {
     /// True if the in-memory PDF needs a password.
     static func isLocked(data: Data) -> Bool { PDFDocument(data: data)?.isLocked ?? false }
 
+    /// True if an (unlocked) PDF is a loan foreclosure / pre-payment statement we deliberately
+    /// don't import. Lets the Gmail auto-scan mark it processed instead of re-downloading it
+    /// every scan. Returns false for locked/unreadable PDFs (their text can't be inspected).
+    static func isUnsupportedDocument(data: Data) -> Bool {
+        guard let doc = PDFDocument(data: data), !doc.isLocked else { return false }
+        var text = ""
+        for i in 0..<doc.pageCount where text.count < 4000 { text += doc.page(at: i)?.string ?? "" }
+        return StatementParser.isLoanClosureStatement(text)
+    }
+
     private static func parse(document doc: PDFDocument, password: String?) throws -> ImportResult {
         if doc.isLocked {
             guard let password, !password.isEmpty else { throw StatementError.locked }
@@ -49,6 +60,9 @@ enum StatementImporter {
         }
         // Text-layer PDF → coordinate-based row reconstruction (recovers columns/narration).
         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // Loan foreclosure / pre-payment statements share the HDFC look-and-feel but list
+            // payable figures, not transactions — reject before any parser fabricates txns.
+            if StatementParser.isLoanClosureStatement(text) { throw StatementError.unsupportedDocument }
             let pages = PDFTableReader.words(doc)
             // HDFC combined statement → many accounts + FDs/RDs.
             if StatementParser.isCombinedHDFC(text) {
@@ -70,6 +84,7 @@ enum StatementImporter {
         // Scanned / image-only PDF (no text layer) → OCR with Vision, then text parse.
         let ocr = ocrText(from: doc)
         guard !ocr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw StatementError.noText }
+        if StatementParser.isLoanClosureStatement(ocr) { throw StatementError.unsupportedDocument }
         if let card = CardStatementParser.parse(text: ocr) {
             return ImportResult(accounts: [card.account], txns: card.txns)
         }

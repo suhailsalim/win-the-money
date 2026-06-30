@@ -103,7 +103,9 @@ final class GmailManager: NSObject, ObservableObject {
                 let key = "\(m.messageId):\(m.attachmentId)"
                 if processed.contains(key) || pending.contains(where: { $0.messageId == m.messageId && $0.attachmentId == m.attachmentId }) { continue }
                 let data = try await GmailProvider.downloadAttachment(accessToken: token, messageId: m.messageId, attachmentId: m.attachmentId)
-                if let r = tryParse(data: data, passwords: vault) {
+                if StatementImporter.isUnsupportedDocument(data: data) {
+                    markProcessed(key)                   // loan foreclosure/pre-payment doc — never a statement
+                } else if let r = tryParse(data: data, passwords: vault) {
                     let rec = StatementRecord(fileName: m.filename.isEmpty ? "Statement" : m.filename,
                                               source: "Gmail", importedAt: Date(), gmailKey: key)
                     store.mergeImport(r, record: rec); markProcessed(key); imported += 1
