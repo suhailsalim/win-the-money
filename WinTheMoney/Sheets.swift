@@ -1371,30 +1371,151 @@ struct AddIncomeStreamSheet: View {
     }
 }
 
-// MARK: - Edit tax (manual)
-struct EditTaxSheet: View {
+// MARK: - Tax profile (track, regime, income, deductions)
+struct TaxProfileSheet: View {
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) private var dismiss
-    @State private var total: Double = 0
-    @State private var deductions: Double = 0
+    @State private var p = TaxProfile()
+    @State private var loaded = false
+
+    private var preview: TaxComputation { TaxEngine.compute(p) }
+    private var showSalary: Bool { p.track == .salaried || p.track == .mixed }
+    private var showProfessional: Bool { p.track == .selfEmployed || p.track == .mixed }
+    private var showBusiness: Bool { p.track == .business || p.track == .mixed }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledAmountField(label: "Estimated annual tax", amount: $total)
-                    LabeledAmountField(label: "80C / 80D deductions", amount: $deductions)
-                } footer: {
-                    Text("Income streams feed the 44ADA presumptive calculation. Mark each advance-tax instalment as paid on the Income & Tax screen.")
+                    Picker("I earn as", selection: $p.track) {
+                        ForEach(IncomeTrack.allCases) { Text($0.label).tag($0) }
+                    }
+                    Text(p.track.blurb).font(.caption).foregroundStyle(Zen.ink3)
+                } header: { Text("Track") }
+
+                if showSalary {
+                    Section("Salary") {
+                        LabeledAmountField(label: "Gross annual salary", amount: $p.grossSalary)
+                        LabeledAmountField(label: "TDS already deducted", amount: $p.tdsPaid)
+                        LabeledAmountField(label: "Employer NPS 80CCD(2)", amount: $p.employerNPS)
+                    }
                 }
+                if showProfessional {
+                    Section { LabeledAmountField(label: "Professional receipts (gross)", amount: $p.professionalReceipts) }
+                    header: { Text("Profession — 44ADA") }
+                    footer: { Text("Presumptive income taxed = 50% of receipts (₹\(INR.compact(p.professionalReceipts * 0.5))).") }
+                }
+                if showBusiness {
+                    Section {
+                        LabeledAmountField(label: "Business turnover", amount: $p.businessTurnover)
+                        VStack(alignment: .leading) {
+                            Text("Digital receipts: \(Int(p.businessDigitalShare * 100))%").font(.caption).foregroundStyle(Zen.ink2)
+                            Slider(value: $p.businessDigitalShare, in: 0...1)
+                        }
+                    } header: { Text("Business — 44AD") }
+                    footer: { Text("Presumptive profit = 6% digital + 8% cash (₹\(INR.compact(TaxEngine.presumptive44AD(turnover: p.businessTurnover, digitalShare: p.businessDigitalShare)))).") }
+                }
+
+                Section("Other income") {
+                    LabeledAmountField(label: "Interest, rent, etc.", amount: $p.otherIncome)
+                    LabeledAmountField(label: "Advance tax paid (self)", amount: $p.advanceTaxPaid)
+                }
+
+                Section {
+                    Toggle("Auto-pick cheaper regime", isOn: $p.autoPickRegime)
+                    if !p.autoPickRegime {
+                        Picker("Regime", selection: $p.regime) { ForEach(TaxRegime.allCases) { Text($0.label).tag($0) } }
+                            .pickerStyle(.segmented)
+                    }
+                } header: { Text("Regime") } footer: {
+                    Text("Recommended: \(preview.recommended.label) — ₹\(INR.compact((preview.recommended == .new ? preview.newRegime : preview.oldRegime).totalTax)) vs ₹\(INR.compact((preview.recommended == .new ? preview.oldRegime : preview.newRegime).totalTax)).")
+                }
+
+                Section {
+                    LabeledAmountField(label: "80C (PF, ELSS, LIC…)", amount: $p.ded80C)
+                    LabeledAmountField(label: "80D (health insurance)", amount: $p.ded80D)
+                    LabeledAmountField(label: "80CCD(1B) NPS", amount: $p.ded80CCD1B)
+                    LabeledAmountField(label: "Home-loan interest 24(b)", amount: $p.dedHomeLoanInterest)
+                    LabeledAmountField(label: "HRA exemption", amount: $p.dedHRA)
+                    LabeledAmountField(label: "Other (80G, 80E…)", amount: $p.otherDeductions)
+                } header: { Text("Old-regime deductions") } footer: {
+                    Text("Used only in the old-regime estimate (and the comparison). The new regime ignores these except employer NPS.")
+                }
+
+                Section {
+                    HStack { Text("Estimated tax").foregroundStyle(Zen.ink2); Spacer()
+                        Text(INR.compact(preview.totalTax)).fontWeight(.bold).foregroundStyle(Zen.ink) }
+                    HStack { Text("Balance after TDS/advance").foregroundStyle(Zen.ink2); Spacer()
+                        Text(INR.compact(preview.balanceDue)).fontWeight(.bold).foregroundStyle(Zen.accentDeep) }
+                } footer: { Text("Indicative only — not tax advice. FY 2025-26 individual slabs.") }
             }
-            .zenForm().navigationTitle("Tax details").navigationBarTitleDisplayMode(.inline)
+            .zenForm().navigationTitle("Tax setup").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { store.setTax(total: total, deductions: deductions); dismiss() }.fontWeight(.semibold)
+                    Button("Save") { p.seeded = true; store.updateTaxProfile(p); dismiss() }.fontWeight(.semibold)
                 }
             }
-            .onAppear { total = store.taxTotal; deductions = store.deductions }
+            .onAppear { guard !loaded else { return }; loaded = true; p = store.taxProfile }
+        }
+    }
+}
+
+// MARK: - Add / import a payslip
+struct AddPayslipSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @State private var slip = Payslip()
+    @State private var showPicker = false
+    @State private var error: String?
+    @State private var imported = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Button { showPicker = true } label: { Label("Import from PDF", systemImage: "doc.badge.plus") }
+                    if imported { Label("Read from payslip — check the figures below", systemImage: "checkmark.seal.fill").font(.caption).foregroundStyle(Zen.greenDeep) }
+                    if let error { Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(Zen.caution) }
+                } footer: { Text("Best-effort read of common Indian payslip layouts. Anything it misses, fill in below.") }
+
+                Section("Slip") {
+                    LabeledField(label: "Employer", placeholder: "Company", text: $slip.employer)
+                    DatePicker("Month", selection: $slip.period, displayedComponents: .date)
+                }
+                Section("Earnings") {
+                    LabeledAmountField(label: "Basic", amount: $slip.basic)
+                    LabeledAmountField(label: "HRA", amount: $slip.hra)
+                    LabeledAmountField(label: "Allowances", amount: $slip.allowances)
+                    LabeledAmountField(label: "Gross earnings", amount: $slip.grossEarnings)
+                }
+                Section("Deductions") {
+                    LabeledAmountField(label: "PF (80C)", amount: $slip.pf)
+                    LabeledAmountField(label: "Professional tax", amount: $slip.profTax)
+                    LabeledAmountField(label: "TDS / income tax", amount: $slip.tds)
+                    LabeledAmountField(label: "Net pay", amount: $slip.netPay)
+                }
+            }
+            .zenForm().navigationTitle("Add payslip").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { store.addPayslip(slip); dismiss() }.fontWeight(.semibold)
+                        .disabled(slip.grossEarnings <= 0 && slip.netPay <= 0)
+                }
+            }
+            .fileImporter(isPresented: $showPicker, allowedContentTypes: [.pdf]) { result in
+                error = nil
+                switch result {
+                case .success(let url):
+                    let ok = url.startAccessingSecurityScopedResource()
+                    defer { if ok { url.stopAccessingSecurityScopedResource() } }
+                    guard let data = try? Data(contentsOf: url) else { error = "Couldn't read that file"; return }
+                    if let parsed = PayslipParser.parse(data: data) { slip = parsed; imported = true }
+                    else { error = "Couldn't read a payslip from that PDF — enter the figures manually." }
+                case .failure(let e): error = e.localizedDescription
+                }
+            }
         }
     }
 }
