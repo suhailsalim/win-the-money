@@ -184,6 +184,52 @@ extension IncomeStream {
     }
 }
 
+// MARK: TaxProfile
+extension TaxProfile {
+    enum CodingKeys: String, CodingKey { case track, regime, autoPickRegime, grossSalary, tdsPaid, professionalReceipts, businessTurnover, businessDigitalShare, otherIncome, ded80C, ded80D, ded80CCD1B, dedHomeLoanInterest, dedHRA, otherDeductions, employerNPS, advanceTaxPaid, seeded }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        track = IncomeTrack(rawValue: c.decode(.track, default: "salaried")) ?? .salaried
+        regime = TaxRegime(rawValue: c.decode(.regime, default: "new")) ?? .new
+        autoPickRegime = c.decode(.autoPickRegime, default: true)
+        grossSalary = c.decode(.grossSalary, default: 0)
+        tdsPaid = c.decode(.tdsPaid, default: 0)
+        professionalReceipts = c.decode(.professionalReceipts, default: 0)
+        businessTurnover = c.decode(.businessTurnover, default: 0)
+        businessDigitalShare = c.decode(.businessDigitalShare, default: 1)
+        otherIncome = c.decode(.otherIncome, default: 0)
+        ded80C = c.decode(.ded80C, default: 0)
+        ded80D = c.decode(.ded80D, default: 0)
+        ded80CCD1B = c.decode(.ded80CCD1B, default: 0)
+        dedHomeLoanInterest = c.decode(.dedHomeLoanInterest, default: 0)
+        dedHRA = c.decode(.dedHRA, default: 0)
+        otherDeductions = c.decode(.otherDeductions, default: 0)
+        employerNPS = c.decode(.employerNPS, default: 0)
+        advanceTaxPaid = c.decode(.advanceTaxPaid, default: 0)
+        seeded = c.decode(.seeded, default: false)
+    }
+}
+
+// MARK: Payslip
+extension Payslip {
+    enum CodingKeys: String, CodingKey { case id, employer, period, basic, hra, allowances, grossEarnings, pf, profTax, tds, otherDeductions, netPay }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.decode(.id, default: UUID())
+        employer = c.decode(.employer, default: "")
+        period = c.decode(.period, default: Date())
+        basic = c.decode(.basic, default: 0)
+        hra = c.decode(.hra, default: 0)
+        allowances = c.decode(.allowances, default: 0)
+        grossEarnings = c.decode(.grossEarnings, default: 0)
+        pf = c.decode(.pf, default: 0)
+        profTax = c.decode(.profTax, default: 0)
+        tds = c.decode(.tds, default: 0)
+        otherDeductions = c.decode(.otherDeductions, default: 0)
+        netPay = c.decode(.netPay, default: 0)
+    }
+}
+
 // MARK: Milestone
 extension Milestone {
     enum CodingKeys: String, CodingKey { case id, amount, name, tag, reached, active, pct }
