@@ -18,10 +18,10 @@ final class Store: ObservableObject {
     @Published var badges: [Badge] = []
     @Published var investments: [Investment] = []
 
-    // income & tax (manual until an integration is connected)
+    // income & tax
     @Published var incomeStreams: [IncomeStream] = []
-    @Published var deductions: Double = 0
-    @Published var taxTotal: Double = 0
+    @Published var taxProfile = TaxProfile()              // inputs for the slab-based estimate
+    @Published var payslips: [Payslip] = []               // imported/entered salary slips
     @Published var advanceTaxPaidStages: Set<Int> = []   // which of the 4 instalments are marked paid
 
     /// Learned merchant/counterparty → category name (auto-applied on import).
@@ -125,8 +125,31 @@ final class Store: ObservableObject {
     func inrAnnual(_ s: IncomeStream) -> Double { s.annual * fxRate(s.currency) }
     func bankName(_ id: UUID?) -> String? { id.flatMap { i in banks.first { $0.id == i }?.name } }
     var grossIncome: Double { incomeStreams.map { inrAnnual($0) }.reduce(0,+) }
-    var presumptiveIncome: Double { grossIncome * 0.5 }
-    var taxableIncome: Double { max(0, presumptiveIncome - deductions) }
+
+    /// The slab-based tax estimate for the current profile (both regimes + recommendation).
+    var tax: TaxComputation { TaxEngine.compute(taxProfile, fyStreamsSalary: grossIncome) }
+    var taxTotal: Double { tax.totalTax }
+
+    func updateTaxProfile(_ p: TaxProfile) { taxProfile = p; save() }
+    func addPayslip(_ s: Payslip) { payslips.insert(s, at: 0); applyPayslipsToProfile(); save() }
+    func remove(payslip: Payslip) { payslips.removeAll { $0.id == payslip.id }; applyPayslipsToProfile(); save() }
+
+    /// Roll up imported payslips into the salary track: project annual gross from the slips' average
+    /// and sum their TDS. Only fills figures the user hasn't manually overridden to non-zero values.
+    func applyPayslipsToProfile() {
+        guard !payslips.isEmpty else { return }
+        let months = Double(payslips.count)
+        let avgGross = payslips.map(\.grossEarnings).reduce(0,+) / max(1, months)
+        var p = taxProfile
+        if p.track == .selfEmployed || p.track == .business { p.track = .mixed }   // they have salary now
+        else if p.track == .salaried || p.grossSalary == 0 { /* salaried stays */ }
+        p.grossSalary = max(p.grossSalary, (avgGross * 12).rounded())   // projected annual
+        p.tdsPaid = payslips.map(\.tds).reduce(0,+)                     // YTD TDS from slips
+        let pf = payslips.map(\.pf).reduce(0,+)
+        if p.ded80C < pf { p.ded80C = min(150_000, pf * (12 / max(1, months))) }   // PF is 80C-eligible (projected)
+        p.seeded = true
+        taxProfile = p
+    }
     /// Advance-tax instalment cumulative percentages (15/45/75/100).
     static let advancePcts: [Double] = [0.15, 0.45, 0.75, 1.0]
     /// Derived from which instalments are marked paid.
@@ -304,9 +327,6 @@ final class Store: ObservableObject {
     func addCard(_ c: CreditCard) { cards.append(c); save() }
     func addCategory(_ c: BudgetCategory) { categories.append(c); save() }
     func addIncomeStream(_ s: IncomeStream) { incomeStreams.append(s); save() }
-    func setTax(total: Double, deductions: Double) {
-        taxTotal = total; self.deductions = deductions; save()
-    }
     func addInvestment(_ i: Investment) { investments.append(i); save() }
 
     func remove(category: BudgetCategory) {
@@ -844,7 +864,8 @@ final class Store: ObservableObject {
         var investments: [Investment] = []
         var nwHistory: [Double] = []
         var fxRates: [String: Double] = ["INR": 1]
-        var deductions = 0.0, taxTotal = 0.0
+        var taxProfile = TaxProfile()
+        var payslips: [Payslip] = []
         var advanceTaxPaidStages: [Int] = []
         var merchantRules: [String: String] = [:]
 
@@ -863,8 +884,8 @@ final class Store: ObservableObject {
             investments = c.decode(.investments, default: [])
             nwHistory  = c.decode(.nwHistory, default: [])
             fxRates    = c.decode(.fxRates, default: ["INR": 1])
-            deductions = c.decode(.deductions, default: 0)
-            taxTotal   = c.decode(.taxTotal, default: 0)
+            taxProfile = c.decode(.taxProfile, default: TaxProfile())
+            payslips   = c.decode(.payslips, default: [])
             advanceTaxPaidStages = c.decode(.advanceTaxPaidStages, default: [])
             merchantRules = c.decode(.merchantRules, default: [:])
         }
@@ -875,7 +896,7 @@ final class Store: ObservableObject {
         p.categories = categories; p.txns = txns; p.banks = banks; p.cards = cards
         p.deposits = deposits; p.goals = goals; p.milestones = milestones; p.badges = badges
         p.incomeStreams = incomeStreams; p.investments = investments; p.nwHistory = nwHistory
-        p.fxRates = fxRates; p.deductions = deductions; p.taxTotal = taxTotal
+        p.fxRates = fxRates; p.taxProfile = taxProfile; p.payslips = payslips
         p.advanceTaxPaidStages = Array(advanceTaxPaidStages)
         p.merchantRules = merchantRules
         return p
@@ -886,7 +907,7 @@ final class Store: ObservableObject {
         deposits = p.deposits; goals = p.goals; milestones = p.milestones; badges = p.badges
         incomeStreams = p.incomeStreams; investments = p.investments; nwHistory = p.nwHistory
         fxRates = p.fxRates.isEmpty ? ["INR": 1] : p.fxRates
-        deductions = p.deductions; taxTotal = p.taxTotal
+        taxProfile = p.taxProfile; payslips = p.payslips
         advanceTaxPaidStages = Set(p.advanceTaxPaidStages)
         merchantRules = p.merchantRules
         if milestones.isEmpty { milestones = Self.defaultMilestones() }
@@ -964,7 +985,7 @@ final class Store: ObservableObject {
     func clearAll() {
         categories = []; txns = []; banks = []; cards = []; deposits = []; goals = []
         investments = []; incomeStreams = []; nwHistory = []
-        deductions = 0; taxTotal = 0; advanceTaxPaidStages = []; merchantRules = [:]
+        taxProfile = TaxProfile(); payslips = []; advanceTaxPaidStages = []; merchantRules = [:]
         fxRates = ["INR": 1]
         milestones = Self.defaultMilestones()
         badges = Self.defaultBadges()
