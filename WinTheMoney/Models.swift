@@ -71,10 +71,27 @@ struct Txn: Identifiable, Codable, Hashable {
     var statementId: String? = nil  // set once confirmed/enriched by a statement (prevents re-match)
     var statementRecordId: UUID? = nil // the StatementRecord this txn was ingested from (cascade delete)
     var needsReview: Bool = false   // a parser couldn't resolve date/amount/merchant — see DataConflict
-    var tags: [String] = []         // facet labels (Entertainment, Tech, …) + "Refund"
+    var tags: [String] = []         // facet labels (Entertainment, Tech, …) + "Refund" + "Add-on"
     var transfer: Bool = false      // CC bill payment / self-transfer — excluded from spend & income
+    var cardholder: String? = nil   // add-on cardholder who made this spend; nil = primary cardholder
+    var reward: Double? = nil       // loyalty reward earned on this spend (points / miles / coins / cashback)
+    var rewardCurrency: String? = nil // unit for `reward`, varies by card (e.g. "Reward Points", "EDGE Miles", "Cashback", "Scapia Coins")
+    var forexCurrency: String? = nil  // original currency of an international spend (e.g. "EUR"); nil = domestic
+    var forexAmount: Double? = nil    // amount in the original currency; `amount` holds the INR value
     var income: Bool { amount > 0 }
     var isRefund: Bool { tags.contains("Refund") }
+    var isInternational: Bool { forexCurrency != nil || tags.contains("International") }
+    /// "EUR 150.06" style label for an international spend, else nil.
+    var forexLabel: String? {
+        guard let c = forexCurrency, let a = forexAmount else { return nil }
+        return "\(c) \(NumberFormatter.localizedString(from: NSNumber(value: a), number: .decimal))"
+    }
+    /// "+540 Reward Points" style label when this spend earned a reward, else nil.
+    var rewardLabel: String? {
+        guard let r = reward, r != 0 else { return nil }
+        let n = NumberFormatter.localizedString(from: NSNumber(value: r), number: .decimal)
+        return "+\(n) \(rewardCurrency ?? "reward")"
+    }
 }
 
 // MARK: - Bank account

@@ -31,6 +31,12 @@ struct SyncedTxn: Hashable {
     var counterparty: String? = nil
     var bankCode: String? = nil
     var category: String? = nil   // statement-provided category (e.g. Axis merchant category)
+    var cardholder: String? = nil // add-on cardholder this row belongs to; nil = primary holder
+    var reward: Double? = nil     // loyalty reward earned on this row (points/miles/coins/cashback)
+    var rewardCurrency: String? = nil // unit for `reward` (varies by card)
+    var forexCurrency: String? = nil  // original currency for an international row (e.g. "EUR"); nil = domestic
+    var forexAmount: Double? = nil    // original-currency amount; `amount` is the INR value
+    var isInternational: Bool = false // row sits in the statement's international section
     // Parser confidence flags (transient — not persisted). When a field couldn't be resolved the
     // row still imports with a best-guess value, but is flagged for review (see DataConflict).
     var dateResolved: Bool = true

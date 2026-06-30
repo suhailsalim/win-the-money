@@ -16,6 +16,10 @@ struct AccountsView: View {
     @State private var editingInvestment: Investment?
     @State private var allocateTarget: AllocTarget?
     @State private var refreshing = false
+    @State private var drill: AcctDrill?
+
+    /// Drill into one account's transactions.
+    struct AcctDrill: Identifiable { let id = UUID(); let name: String }
 
     private var aaEnabled: Bool { store.accountAggregatorEnabled }
 
@@ -81,9 +85,19 @@ struct AccountsView: View {
             .sheet(item: $allocateTarget) { t in
                 QuickAllocateSheet(kind: t.kind, assetId: t.assetId, assetName: t.name, assetValue: t.value)
             }
+            .sheet(item: $drill) { d in TransactionsSheet(account: d.name) }
     }
 
     private func refresh() { refreshing = true; Task { await store.refreshQuotes(); refreshing = false } }
+
+    /// Circular "view transactions" button shown next to each account.
+    private func drillButton(_ name: String) -> some View {
+        Button { drill = .init(name: name) } label: {
+            Image(systemName: "list.bullet").font(.subheadline.weight(.semibold)).foregroundStyle(Zen.accentDeep)
+                .frame(width: 42, height: 42).background(Circle().fill(Zen.accent.opacity(0.14)))
+        }
+        .buttonStyle(.plain).accessibilityLabel("View \(name) transactions")
+    }
 
     @ViewBuilder private var banksGroup: some View {
         group("Bank accounts", INR.compact(store.banksTotal), Zen.ink) {
@@ -94,12 +108,16 @@ struct AccountsView: View {
                                actionTitle: "Add account") { showBank = true }
                 }
                 ForEach(store.banks) { b in
-                    Button { editingBank = b } label: { bankRow(b) }.buttonStyle(.plain)
-                        .contextMenu {
-                            Button { editingBank = b } label: { Label("Edit", systemImage: "pencil") }
-                            Button { allocateTarget = .init(kind: .bank, assetId: b.id, name: b.name, value: b.balance) } label: { Label("Allocate to goal", systemImage: "link.badge.plus") }
-                            Button(role: .destructive) { store.remove(bank: b) } label: { Label("Delete", systemImage: "trash") }
-                        }
+                    HStack(spacing: 8) {
+                        Button { editingBank = b } label: { bankRow(b) }.buttonStyle(.plain)
+                        drillButton(b.name)
+                    }
+                    .contextMenu {
+                        Button { editingBank = b } label: { Label("Edit", systemImage: "pencil") }
+                        Button { drill = .init(name: b.name) } label: { Label("View transactions", systemImage: "list.bullet") }
+                        Button { allocateTarget = .init(kind: .bank, assetId: b.id, name: b.name, value: b.balance) } label: { Label("Allocate to goal", systemImage: "link.badge.plus") }
+                        Button(role: .destructive) { store.remove(bank: b) } label: { Label("Delete", systemImage: "trash") }
+                    }
                 }
                 if aaEnabled { Button { showConnect = true } label: { linkRow }.buttonStyle(.plain) }
             }
@@ -115,11 +133,20 @@ struct AccountsView: View {
                                actionTitle: "Add card") { showCard = true }
                 }
                 ForEach(store.cards) { c in
-                    Button { editingCard = c } label: { cardRow(c) }.buttonStyle(.plain)
-                        .contextMenu {
-                            Button { editingCard = c } label: { Label("Edit", systemImage: "pencil") }
-                            Button(role: .destructive) { store.remove(card: c) } label: { Label("Delete", systemImage: "trash") }
-                        }
+                    VStack(spacing: 8) {
+                        Button { editingCard = c } label: { cardRow(c) }.buttonStyle(.plain)
+                        Button { drill = .init(name: c.name) } label: {
+                            Label("View transactions", systemImage: "list.bullet")
+                                .font(.caption.weight(.semibold)).foregroundStyle(Zen.accentDeep)
+                                .frame(maxWidth: .infinity).padding(.vertical, 9)
+                                .background(Capsule().fill(Zen.accent.opacity(0.12)))
+                        }.buttonStyle(.plain)
+                    }
+                    .contextMenu {
+                        Button { editingCard = c } label: { Label("Edit", systemImage: "pencil") }
+                        Button { drill = .init(name: c.name) } label: { Label("View transactions", systemImage: "list.bullet") }
+                        Button(role: .destructive) { store.remove(card: c) } label: { Label("Delete", systemImage: "trash") }
+                    }
                 }
             }
         }

@@ -44,20 +44,65 @@ enum CardStatementParser {
         let due = headerMoney(["TOTAL AMOUNT DUE"], text, gap: 50)
         let product = pickProduct(.hdfc, text)
         let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+        // HDFC groups spend under an ALL-CAPS cardholder header (primary listed first, then each
+        // add-on card). Assemble multi-line rows like `records` does, but carry the holder each row
+        // falls under so add-on spends can be attributed + tagged. A header is a 2–4 word ALL-CAPS
+        // name whose next non-empty line is a transaction row — which separates a real cardholder
+        // from summary labels like "TOTAL AMOUNT" / "IMPORTANT INFORMATION".
         // domestic rows: "dd/MM/yyyy|", international rows: "dd/MM/yyyy |" (space before pipe)
-        let recs = records(lines, start: { matches(#"^\d{2}/\d{2}/\d{4}\s*\|"#, $0) }, stop: { hdfcNoise($0) })
+        func isDateRow(_ l: String) -> Bool { matches(#"^\d{2}/\d{2}/\d{4}\s*\|"#, l) }
+        func nextNonEmpty(after i: Int) -> String? {
+            var j = i + 1
+            while j < lines.count { if !lines[j].isEmpty { return lines[j] }; j += 1 }
+            return nil
+        }
+        func isHolderHeader(_ l: String, _ i: Int) -> Bool {
+            guard matches(#"^[A-Z][A-Z]+(?: [A-Z]+){1,3}$"#, l), let n = nextNonEmpty(after: i) else { return false }
+            return isDateRow(n)
+        }
+        // HDFC splits spend into "Domestic Transactions" and "International Transactions" sections;
+        // carry which section each row falls under so forex rows can be flagged + their original
+        // currency/amount captured. The card-control summary on page 1 also names both, but it sits
+        // before any transaction row, so the real section headers (which come later) win.
+        var recs: [(text: String, holder: String?, intl: Bool)] = []
+        var cur: String? = nil
+        var primary: String? = nil, holder: String? = nil   // holder == nil ⇒ primary card
+        var intl = false
+        for (i, l) in lines.enumerated() where !l.isEmpty {
+            if matches(#"(?i)international transaction"#, l) { if let c = cur { recs.append((c, holder, intl)); cur = nil }; intl = true; continue }
+            if matches(#"(?i)domestic transaction"#, l)      { if let c = cur { recs.append((c, holder, intl)); cur = nil }; intl = false; continue }
+            if isHolderHeader(l, i) {
+                if let c = cur { recs.append((c, holder, intl)); cur = nil }
+                if primary == nil { primary = l; holder = nil }   // first holder listed = primary card
+                else { holder = (l == primary) ? nil : l }        // a later block under the primary name is still primary
+                continue
+            }
+            if isDateRow(l) { if let c = cur { recs.append((c, holder, intl)) }; cur = l }
+            else if hdfcNoise(l) { if let c = cur { recs.append((c, holder, intl)); cur = nil } }
+            else if cur != nil { cur! += " " + l }
+        }
+        if let c = cur { recs.append((c, holder, intl)) }
+
         var txns: [SyncedTxn] = []
         var lastDate: Date? = nil
-        for g in recs {
+        for (g, rowHolder, isIntl) in recs {
             // first C-amount on the row (later "C…" tokens can be trailing summaries / refs)
             guard let amt = lastMoney(#"C\s*([\d,]+\.\d{2})"#, g, lazyFirst: true) else { continue }
             var m = replace(#"^\d{2}/\d{2}/\d{4}\s*\|\s*\d{2}:\d{2}\s*"#, in: g, with: "")
             m = replace(#"(?:[+\-]\s*\d+\s*)?C\s*[\d,]+\.\d{2}[\s\S]*$"#, in: m, with: "")
             m = replace(#"\(Ref#[^)]*\)"#, in: m, with: "")
+            // reward points earned: the "+ N" sitting just before the row's C-amount ("+ 5 C 164.00").
+            let pts = cap(#"\+\s*(\d+)\s*C\s*[\d,]+\.\d{2}"#, g).flatMap { Double($0) }
+            // international rows carry the original currency + amount ("EUR 150.06") before the INR total.
+            let fx = isIntl ? forex(g) : nil
+            if let fx { m = replace(#"\s*\b\#(fx.currency)\s+[\d,]+\.\d{2}\s*$"#, in: m, with: "") }
             let merchant = tidy(m)
             let credit = creditByKeyword(g)
             let (date, dateOK) = resolveDate(parseDate(cap(#"^(\d{2}/\d{2}/\d{4})"#, g) ?? "", ["dd/MM/yyyy"]), &lastDate)
-            txns.append(mk("hdfc", date, merchant, amt, credit, mask, "HDFC", dateResolved: dateOK, rawContext: g))
+            txns.append(mk("hdfc", date, merchant, amt, credit, mask, "HDFC", dateResolved: dateOK, rawContext: g,
+                           cardholder: rowHolder.map { $0.capitalized },
+                           reward: pts, rewardCurrency: rewardUnit(.hdfc),
+                           forexCurrency: fx?.currency, forexAmount: fx?.amount, isInternational: isIntl))
         }
         let rw = reward("Points", #"Reward Points[\s\S]{0,15}?([\d,]{2,})"#, text)
         return (cardAccount(.hdfc, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
@@ -103,8 +148,11 @@ enum CardStatementParser {
             var m = replace(#"^\d{2}/\d{2}/\d{4}\s+\d{6,}\s*"#, in: g, with: "")
             m = replace(#"\s+\d+\s+[\d,]+\.\d{2}(\s+(?:IN|CR))?.*$"#, in: m, with: "")
             let credit = creditByKeyword(g) || g.uppercased().contains(" CR")
+            // best-effort: the integer immediately before the amount is the row's reward points
+            let pts = cap(#"\s(\d+)\s+[\d,]+\.\d{2}(?:\s+(?:IN|CR))?\s*$"#, g).flatMap { Double($0) }
             let (date, dateOK) = resolveDate(parseDate(cap(#"^(\d{2}/\d{2}/\d{4})"#, g) ?? "", ["dd/MM/yyyy"]), &lastDate)
-            txns.append(mk("icici", date, tidy(m), amt, credit, mask, "ICICI", dateResolved: dateOK, rawContext: g))
+            txns.append(mk("icici", date, tidy(m), amt, credit, mask, "ICICI", dateResolved: dateOK, rawContext: g,
+                           reward: pts, rewardCurrency: rewardUnit(.icici)))
         }
         let rw = reward("Cashback", #"EARNINGS[\s\S]{0,200}?\b(\d{1,7})\s+\1\b"#, text)
         return (cardAccount(.icici, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
@@ -188,14 +236,40 @@ enum CardStatementParser {
     }
     private static func mk(_ tag: String, _ date: Date, _ merchant: String, _ v: Double, _ credit: Bool,
                            _ mask: String, _ code: String, category: String? = nil,
-                           dateResolved: Bool = true, rawContext: String = "") -> SyncedTxn {
+                           dateResolved: Bool = true, rawContext: String = "", cardholder: String? = nil,
+                           reward: Double? = nil, rewardCurrency: String? = nil,
+                           forexCurrency: String? = nil, forexAmount: Double? = nil,
+                           isInternational: Bool = false) -> SyncedTxn {
         let name = merchant.isEmpty ? "\(code) card" : merchant
-        return SyncedTxn(externalId: "cc:\(tag):\(date.timeIntervalSince1970):\(name.prefix(14)):\(v)",
+        // Add-on rows share the date/merchant/amount of the primary card, so fold the holder into the
+        // externalId to keep them distinct (and dedupe-stable) from any identical primary-card spend.
+        let holderKey = cardholder.map { ":\($0.prefix(8))" } ?? ""
+        return SyncedTxn(externalId: "cc:\(tag):\(date.timeIntervalSince1970):\(name.prefix(14)):\(v)\(holderKey)",
                          narration: name, amount: credit ? v : -v, date: date,
                          accountMask: mask, merchant: name.capitalized,
                          source: .card, counterparty: name, bankCode: code, category: category,
+                         cardholder: cardholder,
+                         reward: reward, rewardCurrency: reward != nil ? rewardCurrency : nil,
+                         forexCurrency: forexCurrency, forexAmount: forexAmount, isInternational: isInternational,
                          dateResolved: dateResolved, merchantResolved: !merchant.isEmpty,
                          rawContext: rawContext.isEmpty ? name : rawContext)
+    }
+    /// The loyalty unit an issuer's rewards are denominated in — used to label per-txn rewards.
+    private static func rewardUnit(_ issuer: Issuer) -> String {
+        switch issuer {
+        case .hdfc:    return "Reward Points"
+        case .axis:    return "EDGE Miles"
+        case .icici:   return "Cashback"        // Amazon Pay cashback (₹)
+        case .federal: return "Scapia Coins"
+        case .generic: return "Reward"
+        }
+    }
+    /// An international row's original currency + amount, captured from "<CCY> <amount>" sitting just
+    /// before the (optional reward and) INR total — e.g. "EUR 150.06 + 560 C 16,889.41".
+    private static func forex(_ s: String) -> (currency: String, amount: Double)? {
+        guard let g = cap2(#"\b([A-Z]{3})\s+([\d,]+\.\d{2})\s*(?:\+\s*\d+\s*)?C\s*[\d,]+\.\d{2}"#, s),
+              g.0 != "IST", g.0 != "GST" else { return nil }   // guard against stray all-caps tokens
+        return money(g.1).map { (g.0, $0) }
     }
     /// Resolve a row date or carry the last good one forward (flagged unresolved), instead of
     /// silently stamping today — see DataConflict / the statement-date fix.
@@ -274,6 +348,13 @@ enum CardStatementParser {
         let ns = text as NSString
         guard let m = r.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)), m.numberOfRanges > 1 else { return nil }
         return ns.substring(with: m.range(at: 1))
+    }
+    /// First match's first two capture groups (case-sensitive — callers need exact casing, e.g. a currency code).
+    private static func cap2(_ pattern: String, _ text: String) -> (String, String)? {
+        guard let r = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+        let ns = text as NSString
+        guard let m = r.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)), m.numberOfRanges > 2 else { return nil }
+        return (ns.substring(with: m.range(at: 1)), ns.substring(with: m.range(at: 2)))
     }
     private static func matches(_ pattern: String, _ s: String) -> Bool {
         guard let r = try? NSRegularExpression(pattern: pattern, options: []) else { return false }

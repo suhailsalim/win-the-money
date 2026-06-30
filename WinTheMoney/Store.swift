@@ -244,6 +244,25 @@ final class Store: ObservableObject {
         }
         return m.map { ($0.key, $0.value) }.sorted { $0.1 > $1.1 }
     }
+    /// International spend (INR) over the last N months, with a per-original-currency breakdown.
+    func internationalSpend(months: Int) -> (total: Double, count: Int, byCurrency: [(currency: String, amount: Double)]) {
+        let xs = txnsInLast(months: months).filter { $0.isInternational && !$0.transfer && $0.amount < 0 }
+        let total = xs.reduce(0) { $0 + abs($1.amount) }
+        var m: [String: Double] = [:]
+        for t in xs {
+            let c = (t.forexCurrency?.isEmpty == false) ? t.forexCurrency! : "Other"
+            m[c, default: 0] += abs(t.amount)
+        }
+        return (total, xs.count, m.sorted { $0.value > $1.value }.map { (currency: $0.key, amount: $0.value) })
+    }
+    /// Loyalty rewards earned over the last N months, grouped by reward unit (points/miles/coins/cashback).
+    func rewardsEarned(months: Int) -> [(currency: String, total: Double)] {
+        var m: [String: Double] = [:]
+        for t in txnsInLast(months: months) where (t.reward ?? 0) != 0 {
+            m[t.rewardCurrency ?? "Reward", default: 0] += (t.reward ?? 0)
+        }
+        return m.sorted { $0.value > $1.value }.map { (currency: $0.key, total: $0.value) }
+    }
     func monthlyTagSpend(_ tag: String, months: Int) -> [Double] {
         let cal = Calendar.current
         return (0..<max(1, months)).reversed().map { i in
@@ -305,6 +324,15 @@ final class Store: ObservableObject {
             let pct = planTotal > 0 ? Int((spend/planTotal*100).rounded()) : 0
             return PlanMonth(month: d.formatted(.dateTime.month(.abbreviated)), pct: pct, over: pct > 100)
         }
+    }
+    /// Net spend for one category within an arbitrary [from, to) window (for Plan period/month views).
+    func spend(inCategory name: String, from: Date, to: Date) -> Double {
+        max(0, txns.filter { $0.category == name && $0.date >= from && $0.date < to }
+            .map(spendContribution).reduce(0, +))
+    }
+    /// Net spend across all categories within an arbitrary [from, to) window.
+    func totalSpend(from: Date, to: Date) -> Double {
+        max(0, txns.filter { $0.date >= from && $0.date < to }.map(spendContribution).reduce(0, +))
     }
     var currentMonthName: String { Date().formatted(.dateTime.month(.wide)) }
     var daysLeftInMonth: Int {
@@ -620,10 +648,14 @@ final class Store: ObservableObject {
                 let sym = categories.first { $0.name == cat }?.symbol ?? cl.symbol
                 var tags = cl.tags
                 if s.hasConflict { tags.append("Needs review") }
+                if s.cardholder != nil { tags.append("Add-on") }   // spend on an add-on card
+                if s.isInternational { tags.append("International") }
                 let t = Txn(merchant: merchant, symbol: sym, category: cat, account: accName,
                             amount: s.amount, date: s.date, externalId: s.externalId,
                             source: s.source, counterparty: s.counterparty, statementId: s.externalId,
-                            statementRecordId: statementRecordId, needsReview: s.hasConflict, tags: tags, transfer: cl.transfer)
+                            statementRecordId: statementRecordId, needsReview: s.hasConflict, tags: tags, transfer: cl.transfer,
+                            cardholder: s.cardholder, reward: s.reward, rewardCurrency: s.rewardCurrency,
+                            forexCurrency: s.forexCurrency, forexAmount: s.forexAmount)
                 txns.insert(t, at: 0)
                 registerConflicts(for: s, txnId: t.id, recordId: statementRecordId)
                 added += 1
@@ -655,6 +687,10 @@ final class Store: ObservableObject {
         if let m = s.merchant, !m.isEmpty { t.merchant = m }
         let cl = classify(merchant: t.merchant, counterparty: t.counterparty, narration: s.narration, income: t.amount > 0)
         t.tags = Self.uniq(t.tags + cl.tags)
+        if let h = s.cardholder { t.cardholder = h; t.tags = Self.uniq(t.tags + ["Add-on"]) }
+        if let r = s.reward { t.reward = r; t.rewardCurrency = s.rewardCurrency }
+        if let fc = s.forexCurrency { t.forexCurrency = fc; t.forexAmount = s.forexAmount }
+        if s.isInternational { t.tags = Self.uniq(t.tags + ["International"]) }
         if cl.transfer { t.transfer = true }
         t.source = .card
         t.statementId = s.externalId
