@@ -32,6 +32,8 @@ final class GmailManager: NSObject, ObservableObject {
     /// Keys (messageId:attachmentId) of statement emails already imported or dismissed — so a
     /// re-scan never re-imports (duplicates) or re-queues them.
     private var processed: Set<String> = GmailManager.loadProcessed()
+    /// Message ids of alert emails already scanned — so we never re-download/re-parse them.
+    private var processedMsgs: Set<String> = GmailManager.loadProcessedMsgs()
 
     private var session: ASWebAuthenticationSession?
     private var verifier = ""
@@ -63,9 +65,9 @@ final class GmailManager: NSObject, ObservableObject {
         if let files = try? FileManager.default.contentsOfDirectory(at: Self.cacheDir, includingPropertiesForKeys: nil) {
             for u in files where u.lastPathComponent.hasPrefix("stmt_") { try? FileManager.default.removeItem(at: u) }
         }
-        pending = []; processed = []
+        pending = []; processed = []; processedMsgs = []
         let d = UserDefaults.standard
-        ["gmail_days", "gmail_autoscan", "gmail_stmt_autoscan", "gmail_last", "gmail_stmt_last", "gmail_pending_stmts", "gmail_done_stmts"].forEach { d.removeObject(forKey: $0) }
+        ["gmail_days", "gmail_autoscan", "gmail_stmt_autoscan", "gmail_last", "gmail_stmt_last", "gmail_pending_stmts", "gmail_done_stmts", "gmail_done_msgs"].forEach { d.removeObject(forKey: $0) }
         scanDays = 60; autoScan = true; statementAutoScan = true
         phase = .idle; stmtPhase = .idle
     }
@@ -74,16 +76,17 @@ final class GmailManager: NSObject, ObservableObject {
     func scan(into store: Store) { guard !isWorking else { return }; Task { await runScan(store) } }
     func scanStatements(into store: Store) { Task { await runStatementScan(store) } }
 
-    /// Background / on-launch scan: runs quietly only if connected, enabled, and stale (>6h).
+    /// Background / on-launch scan: runs quietly when connected, enabled, and stale (>1h). Re-scans
+    /// are cheap — the processed-message ledger means only genuinely new emails are downloaded.
     func backgroundScanIfDue(into store: Store) async {
         guard connected, autoScan, isConfigured, !isWorking else { return }
-        if let last = lastScan, Date().timeIntervalSince(last) < 6 * 3600 { return }
+        if let last = lastScan, Date().timeIntervalSince(last) < 3600 { return }
         await runScan(store)
     }
-    /// Background statement scan: connected + enabled + stale (>20h, ~daily).
+    /// Background statement scan: connected + enabled + stale (>12h).
     func statementScanIfDue(into store: Store) async {
         guard connected, statementAutoScan, isConfigured else { return }
-        if let last = lastStatementScan, Date().timeIntervalSince(last) < 20 * 3600 { return }
+        if let last = lastStatementScan, Date().timeIntervalSince(last) < 12 * 3600 { return }
         await runStatementScan(store)
     }
 
@@ -164,6 +167,18 @@ final class GmailManager: NSObject, ObservableObject {
     private static func loadProcessed() -> Set<String> {
         Set(UserDefaults.standard.stringArray(forKey: "gmail_done_stmts") ?? [])
     }
+
+    // MARK: processed alert-email ledger
+    private func markProcessedMsgs(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        processedMsgs.formUnion(ids)
+        // Soft cap so the ledger can't grow without bound over years of alerts.
+        if processedMsgs.count > 8000 { processedMsgs = Set(processedMsgs.prefix(6000)) }
+        UserDefaults.standard.set(Array(processedMsgs), forKey: "gmail_done_msgs")
+    }
+    private static func loadProcessedMsgs() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: "gmail_done_msgs") ?? [])
+    }
     private static var cacheDir: URL { FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0] }
 
     private func runConnect() async {
@@ -194,14 +209,20 @@ final class GmailManager: NSObject, ObservableObject {
         }
     }
 
-    private func runScan(_ store: Store) async {
+    /// Re-scan every matching email, ignoring the processed-message ledger (e.g. after a parser
+    /// improvement). Still de-dups at the store via stable externalIds.
+    func rescanAll(into store: Store) { guard !isWorking else { return }; Task { await runScan(store, force: true) } }
+
+    private func runScan(_ store: Store, force: Bool = false) async {
         guard connected else { phase = .failed("Connect Gmail first."); return }
         do {
             phase = .working("Reading transaction emails…")
             let token = try await accessToken()
-            let (txns, balances) = try await GmailProvider.fetchTransactions(accessToken: token, days: scanDays)
+            let (txns, balances, scanned) = try await GmailProvider.fetchTransactions(
+                accessToken: token, days: scanDays, skip: force ? [] : processedMsgs)
             let n = store.mergeSynced(accounts: [], txns: txns, adjustBalances: true)
             store.applyBalances(balances)
+            markProcessedMsgs(scanned)
             UserDefaults.standard.set(Date(), forKey: "gmail_last")
             phase = .success(n)
         } catch {
