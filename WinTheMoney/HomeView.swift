@@ -2,13 +2,15 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var gmail: GmailManager
     @State private var sheet: HomeSheet?
 
-    enum HomeSheet: Identifiable { case settings, txns, upload, accounts
+    enum HomeSheet: Identifiable { case settings, txns, upload, accounts, statements
         var id: Int { hashValue } }
 
     var body: some View {
         VStack(spacing: 22) {
+            if !gmail.pending.isEmpty { pendingBanner }
             hero
             statRow
 
@@ -61,8 +63,30 @@ struct HomeView: View {
             case .txns: TransactionsSheet()
             case .upload: UploadSheet()
             case .accounts: AccountsView()
+            case .statements: NavigationStack { StatementsEmailView() }
             }
         }
+    }
+
+    // MARK: pending statements banner — locked PDFs (e.g. password-protected Federal/Scapia
+    // statements) wait silently until unlocked; surface them so an account never goes missing.
+    private var pendingBanner: some View {
+        Button { sheet = .statements } label: {
+            HStack(spacing: 12) {
+                IconChip(symbol: "lock.doc", tint: Zen.caution)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(gmail.pending.count) statement\(gmail.pending.count == 1 ? "" : "s") need a password")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                    Text("Tap to unlock and import — your accounts won't show until then")
+                        .font(.caption2).foregroundStyle(Zen.ink2).lineLimit(2)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Zen.ink3)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .zenCard(tinted: Zen.caution, 20)
+        }.buttonStyle(.plain)
     }
 
     // generic titled section
@@ -200,8 +224,14 @@ struct CategoryRow: View {
         HStack(spacing: 12) {
             IconChip(symbol: c.symbol, size: compact ? 34 : 40, tint: Color(hex: c.color))
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
+                HStack(spacing: 6) {
                     Text(c.name).font(.subheadline.weight(compact ? .semibold : .bold)).foregroundStyle(Zen.ink)
+                    if c.period != .monthly {
+                        Text(c.period == .custom ? "\(c.periodMonths)mo" : c.period.label)
+                            .font(.caption2.weight(.bold)).foregroundStyle(Zen.accentDeep)
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Capsule().fill(Zen.accent.opacity(0.16)))
+                    }
                     Spacer()
                     HStack(spacing: 3) {
                         Text(INR.compact(c.spent)).foregroundStyle(Zen.ink2)
@@ -213,8 +243,8 @@ struct CategoryRow: View {
             if !compact {
                 VStack(alignment: .trailing, spacing: 1) {
                     Text("\(Int(c.pct*100))%").font(.subheadline.weight(.bold)).foregroundStyle(Color(hex: c.barColorHex))
-                    Text("\(INR.compact(abs(c.left))) \(c.over ? "over" : "left")").font(.caption2).foregroundStyle(Zen.ink3)
-                }.frame(width: 58, alignment: .trailing)
+                    Text("\(INR.compact(abs(c.left))) \(c.over ? "over" : "left")\(c.period == .monthly ? "" : "/\(c.period.noun)")").font(.caption2).foregroundStyle(Zen.ink3)
+                }.frame(width: 64, alignment: .trailing)
             }
         }
         .padding(.horizontal, 15).padding(.vertical, compact ? 13 : 14)

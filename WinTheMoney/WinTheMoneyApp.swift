@@ -5,6 +5,7 @@ struct WinTheMoneyApp: App {
     @StateObject private var store = Store()
     @StateObject private var sync = SyncManager()
     @StateObject private var gmail = GmailManager()
+    @StateObject private var ai = AIManager()
     @Environment(\.scenePhase) private var scenePhase
     var body: some Scene {
         WindowGroup {
@@ -12,6 +13,7 @@ struct WinTheMoneyApp: App {
                 .environmentObject(store)
                 .environmentObject(sync)
                 .environmentObject(gmail)
+                .environmentObject(ai)
                 .tint(Zen.accentDeep)
         }
         .onChange(of: scenePhase) { _, phase in

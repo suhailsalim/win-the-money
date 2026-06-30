@@ -37,8 +37,9 @@ enum StatementParser {
         case .federal:
             if let acc = cap(#"Account Number\s*:\s*(\d+)"#, text) { mask = String(acc.suffix(4)) }
             branch = cap(#"Branch\s*(?:Name)?\s*:\s*([A-Za-z0-9 ./&'-]{2,40})"#, text)?.trimmingCharacters(in: .whitespaces)
-            type = cap(#"Type of Account\s*:\s*([A-Za-z ]{3,20})"#, text)?.trimmingCharacters(in: .whitespaces) ?? type
-            tier = cap(#"Scheme\s*:?\s*([A-Za-z ]{3,30})"#, text)?.trimmingCharacters(in: .whitespaces)
+            // Capture at most two words so "Savings Account Account Status…" doesn't bleed into the type.
+            type = cap(#"Type of Account\s*:\s*([A-Za-z]+(?:\s[A-Za-z]+)?)"#, text)?.trimmingCharacters(in: .whitespaces) ?? type
+            tier = cap(#"Scheme\s*:?\s*([A-Za-z]+(?:\s[A-Za-z]+)?)"#, text)?.trimmingCharacters(in: .whitespaces)
         case .hdfc:
             if let acc = cap(#"Account No\s*:?\s*(\d{3,})"#, text) { mask = String(acc.suffix(4)) }
             branch = cap(#"(?:Account Branch|Branch)\s*:?\s*([A-Za-z0-9 .&'-]{2,40})"#, text)?.trimmingCharacters(in: .whitespaces)
@@ -50,10 +51,37 @@ enum StatementParser {
             return nil
         }
         guard !mask.isEmpty else { return nil }
-        let balance = cap(#"(?:Available|Closing) Balance\s*:?\s*([\d,]+\.\d{2})"#, text).flatMap(money) ?? 0
+        var balance = cap(#"(?:Available|Closing) Balance\s*:?\s*([\d,]+\.\d{2})"#, text).flatMap(money) ?? 0
+        // Federal statements carry no "Closing Balance:" label — the closing figure is the last running
+        // balance in the transaction table (each amount row ends "<amount> <balance> Cr|Dr").
+        if balance == 0, bank == .federal {
+            balance = scan(#"([\d,]+\.\d{2})\s+(?:Cr|Dr)\b"#, text).last.flatMap { money($0[1]) } ?? 0
+        }
         let info = BankCatalog.match(ifsc: ifsc) ?? (bank == .federal ? BankCatalog.info("FED") : BankCatalog.info("HDFC"))
         return SyncedAccount(bank: info?.name ?? "Bank", mask: mask, type: type, balance: balance,
-                             kind: .bank, bankCode: info?.code, ifsc: ifsc, branch: branch, tier: tier)
+                             kind: .bank, bankCode: info?.code, ifsc: ifsc, branch: branch, tier: tier,
+                             asOf: statementAsOf(text))
+    }
+
+    /// The date a statement's closing balance is stated *as of* — the statement period's end date.
+    /// Used to reconstruct the live balance by adding transactions dated after it. Ordered most-
+    /// specific first; the loose "to" form is anchored so it can't match a date inside a narration.
+    static func statementAsOf(_ text: String) -> Date? {
+        let ymd = ["yyyy-MM-dd", "yyyy/MM/dd"]
+        let dmy = ["dd/MM/yyyy", "dd-MMM-yyyy", "dd-MM-yyyy"]
+        let patterns: [(String, [String])] = [
+            // Federal: "Statement of Account for the period 2025-11-06 to 2026-05-05"
+            (#"for the period\s+\d{4}[-/]\d{2}[-/]\d{2}\s+to\s+(\d{4}[-/]\d{2}[-/]\d{2})"#, ymd),
+            (#"Date of Issue\s*:?\s*(\d{2}[-/][A-Za-z0-9]{2,3}[-/]\d{4})"#, dmy),
+            (#"(?:Statement Period|Period)[^\d]{0,20}\d{2}[-/][A-Za-z0-9]{2,3}[-/]\d{2,4}\s*(?:to|-|–|—)\s*(\d{2}[-/][A-Za-z0-9]{2,3}[-/]\d{2,4})"#, dmy + ["dd/MM/yy"]),
+            (#"(?:as on|As On|Generated on)\s*:?\s*(\d{2}[-/][A-Za-z0-9]{2,3}[-/]\d{4})"#, dmy),
+            // Loose "To : <date>" — must not be preceded by a digit/dash (avoids "27-12-2025 To 25-12-2025").
+            (#"(?<![\d-])\b[Tt]o\s*:\s*(\d{2}[-/][A-Za-z0-9]{2,3}[-/]\d{4})"#, dmy),
+        ]
+        for (p, fmts) in patterns {
+            if let s = cap(p, text), let d = parseDate(s, fmts) { return d }
+        }
+        return nil
     }
 
     // MARK: - HDFC Combined Account SmartStatement (multiple accounts + FDs/RDs)
@@ -101,8 +129,12 @@ enum StatementParser {
             let reconClosing = (opening ?? 0) + acctTxns.map(\.amount).reduce(0, +)
             if acctTxns.isEmpty || (summaryClosing.map { abs($0 - reconClosing) > 1 } ?? false) { acctTxns = [] }
             let balance = summaryClosing ?? (acctTxns.isEmpty ? (opening ?? 0) : reconClosing)
+            // As-of date for balance reconstruction: the statement period end, else this account's
+            // latest reconstructed transaction. Without it, June Gmail alerts can't offset a May closing.
+            let asOf = statementAsOf(secText) ?? acctTxns.map(\.date).max()
             accounts.append(SyncedAccount(bank: info?.name ?? "HDFC Bank", mask: mask, type: type,
-                                          balance: balance, kind: .bank, bankCode: "HDFC", ifsc: ifsc, branch: branch))
+                                          balance: balance, kind: .bank, bankCode: "HDFC", ifsc: ifsc, branch: branch,
+                                          asOf: asOf))
             txns += acctTxns
             i = j
         }

@@ -16,15 +16,36 @@ enum Tab: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Budget cap period
+/// The window a category's `plan` (cap) applies over. Most spends are monthly, but some — insurance,
+/// subscriptions billed yearly, school fees — are naturally quarterly / annual / custom-length.
+enum BudgetPeriod: String, Codable, CaseIterable, Identifiable {
+    case monthly, quarterly, annual, custom
+    var id: String { rawValue }
+    /// Cycle length in months (custom is handled via `BudgetCategory.customMonths`).
+    var months: Int { switch self { case .monthly: 1; case .quarterly: 3; case .annual: 12; case .custom: 1 } }
+    var label: String { switch self { case .monthly: "Monthly"; case .quarterly: "Quarterly"; case .annual: "Annual"; case .custom: "Custom" } }
+    /// Short noun for "this <noun>" / "per <noun>".
+    var noun: String { switch self { case .monthly: "month"; case .quarterly: "quarter"; case .annual: "year"; case .custom: "period" } }
+}
+
 // MARK: - Category (budget)
 struct BudgetCategory: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
     var symbol: String        // SF Symbol
-    var spent: Double
-    var plan: Double
+    var spent: Double         // recomputed: spend within the current cap cycle (see Store.recomputeSpent)
+    var plan: Double          // the cap, expressed per cycle (e.g. ₹24,000 / year for annual insurance)
     var color: String         // hex for icon tint
     var isSystem: Bool = false // a maintained base category — can't be deleted/renamed
+    var period: BudgetPeriod = .monthly   // window the cap applies over
+    var customMonths: Int = 1             // cycle length when period == .custom
+    var anchor: Date? = nil               // cycle start (e.g. insurance renewal); nil → financial-year start
+
+    /// Effective cycle length in months (≥ 1).
+    var periodMonths: Int { period == .custom ? max(1, customMonths) : period.months }
+    /// The cap normalised to a per-month figure, so non-monthly caps still fold into the monthly overview.
+    var monthlyPlan: Double { plan / Double(periodMonths) }
 
     var pct: Double { plan > 0 ? spent / plan : 0 }
     var left: Double { plan - spent }
@@ -308,6 +329,94 @@ struct IncomeStream: Identifiable, Codable, Hashable {
 
     var perPeriodAmount: Double { monthly ? annual / 12 : annual }
     var periodLabel: String { monthly ? "mo" : "yr" }
+}
+
+// MARK: - Income & tax: track, regime, profile, payslip
+/// Which earning situation the user is in — drives how taxable income is computed.
+enum IncomeTrack: String, Codable, CaseIterable, Identifiable {
+    case salaried, selfEmployed, business, mixed
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .salaried: return "Salaried"
+        case .selfEmployed: return "Self-employed"
+        case .business: return "Business"
+        case .mixed: return "Mixed"
+        }
+    }
+    var blurb: String {
+        switch self {
+        case .salaried: return "Salary with TDS; import payslips"
+        case .selfEmployed: return "Professional — 44ADA presumptive (50%)"
+        case .business: return "Business — 44AD presumptive (6/8%)"
+        case .mixed: return "Salary + profession/other income"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .salaried: return "briefcase.fill"
+        case .selfEmployed: return "laptopcomputer"
+        case .business: return "storefront.fill"
+        case .mixed: return "rectangle.3.group.fill"
+        }
+    }
+}
+
+enum TaxRegime: String, Codable, CaseIterable, Identifiable {
+    case new, old
+    var id: String { rawValue }
+    var label: String { self == .new ? "New regime" : "Old regime" }
+}
+
+/// All the inputs needed to estimate India income tax. Amounts are annual ₹ for the current FY.
+struct TaxProfile: Codable, Hashable {
+    var track: IncomeTrack = .salaried
+    var regime: TaxRegime = .new          // user's chosen/declared regime (engine still compares both)
+    var autoPickRegime: Bool = true       // when true, follow whichever regime is cheaper
+
+    // Salary (annual, taxable — i.e. gross salary; standard deduction applied by the engine)
+    var grossSalary: Double = 0
+    var tdsPaid: Double = 0               // TDS already deducted by employer (from payslips)
+
+    // Presumptive
+    var professionalReceipts: Double = 0  // 44ADA — gross professional receipts
+    var businessTurnover: Double = 0      // 44AD — gross turnover/sales
+    var businessDigitalShare: Double = 1  // 0…1 share of turnover received digitally (6% vs 8%)
+
+    // Other taxable income (interest, rent net, capital gains treated as slab income — simplified)
+    var otherIncome: Double = 0
+
+    // Old-regime deductions (ignored under the new regime)
+    var ded80C: Double = 0                // capped 1.5L
+    var ded80D: Double = 0                // health insurance
+    var ded80CCD1B: Double = 0            // NPS extra, capped 50k
+    var dedHomeLoanInterest: Double = 0   // 24(b), capped 2L (self-occupied)
+    var dedHRA: Double = 0                // exempt HRA
+    var otherDeductions: Double = 0       // 80G, 80E, etc.
+
+    // New-regime employer NPS 80CCD(2) — allowed in both regimes
+    var employerNPS: Double = 0
+
+    var advanceTaxPaid: Double = 0        // self-paid advance tax (separate from TDS)
+    var seeded: Bool = false              // whether the user has set this up
+}
+
+/// A parsed/entered salary slip — drives TDS tracking, salary-component view, and annual projection.
+struct Payslip: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var employer: String = ""
+    var period: Date = Date()             // the month this slip is for
+    var basic: Double = 0
+    var hra: Double = 0
+    var allowances: Double = 0            // special + other allowances
+    var grossEarnings: Double = 0
+    var pf: Double = 0                    // employee PF (80C-eligible)
+    var profTax: Double = 0
+    var tds: Double = 0                   // income tax deducted this month
+    var otherDeductions: Double = 0
+    var netPay: Double = 0
+
+    var monthLabel: String { period.formatted(.dateTime.month(.abbreviated).year()) }
 }
 
 // MARK: - Net worth composition segment

@@ -15,6 +15,9 @@ struct SyncedAccount: Hashable {
     var cardName: String? = nil   // for cards (matched product, e.g. "HDFC Diners Black")
     var rewardKind: String? = nil
     var rewardBalance: Double? = nil
+    /// The statement's closing/as-of date. `balance` is the figure *as of* this date — the live
+    /// balance is reconstructed by adding any transactions dated after it. nil = treat as current.
+    var asOf: Date? = nil
 }
 
 struct SyncedTxn: Hashable {

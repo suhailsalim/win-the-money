@@ -22,10 +22,10 @@ final class Store: ObservableObject {
     @Published var statements: [StatementRecord] = []
     @Published var conflicts: [DataConflict] = []
 
-    // income & tax (manual until an integration is connected)
+    // income & tax
     @Published var incomeStreams: [IncomeStream] = []
-    @Published var deductions: Double = 0
-    @Published var taxTotal: Double = 0
+    @Published var taxProfile = TaxProfile()              // inputs for the slab-based estimate
+    @Published var payslips: [Payslip] = []               // imported/entered salary slips
     @Published var advanceTaxPaidStages: Set<Int> = []   // which of the 4 instalments are marked paid
 
     /// Learned merchant/counterparty → category name (auto-applied on import).
@@ -101,7 +101,8 @@ final class Store: ObservableObject {
     var toTargetPct: Int { netWorthTarget > 0 ? Int(min(100, liquidNetWorth / netWorthTarget * 100)) : 0 }
 
     var spentTotal: Double { monthSpend(monthsAgo: 0) }
-    var planTotal: Double { categories.map(\.plan).reduce(0,+) }
+    /// Sum of caps normalised to per-month, so quarterly/annual caps fold into the monthly overview.
+    var planTotal: Double { categories.map(\.monthlyPlan).reduce(0,+) }
     var planLeft: Double { planTotal - spentTotal }
     var planPct: Int { planTotal > 0 ? Int((spentTotal/planTotal*100).rounded()) : 0 }
     var top3: [BudgetCategory] { Array(categories.sorted { $0.spent > $1.spent }.prefix(3)) }
@@ -128,8 +129,31 @@ final class Store: ObservableObject {
     func inrAnnual(_ s: IncomeStream) -> Double { s.annual * fxRate(s.currency) }
     func bankName(_ id: UUID?) -> String? { id.flatMap { i in banks.first { $0.id == i }?.name } }
     var grossIncome: Double { incomeStreams.map { inrAnnual($0) }.reduce(0,+) }
-    var presumptiveIncome: Double { grossIncome * 0.5 }
-    var taxableIncome: Double { max(0, presumptiveIncome - deductions) }
+
+    /// The slab-based tax estimate for the current profile (both regimes + recommendation).
+    var tax: TaxComputation { TaxEngine.compute(taxProfile, fyStreamsSalary: grossIncome) }
+    var taxTotal: Double { tax.totalTax }
+
+    func updateTaxProfile(_ p: TaxProfile) { taxProfile = p; save() }
+    func addPayslip(_ s: Payslip) { payslips.insert(s, at: 0); applyPayslipsToProfile(); save() }
+    func remove(payslip: Payslip) { payslips.removeAll { $0.id == payslip.id }; applyPayslipsToProfile(); save() }
+
+    /// Roll up imported payslips into the salary track: project annual gross from the slips' average
+    /// and sum their TDS. Only fills figures the user hasn't manually overridden to non-zero values.
+    func applyPayslipsToProfile() {
+        guard !payslips.isEmpty else { return }
+        let months = Double(payslips.count)
+        let avgGross = payslips.map(\.grossEarnings).reduce(0,+) / max(1, months)
+        var p = taxProfile
+        if p.track == .selfEmployed || p.track == .business { p.track = .mixed }   // they have salary now
+        else if p.track == .salaried || p.grossSalary == 0 { /* salaried stays */ }
+        p.grossSalary = max(p.grossSalary, (avgGross * 12).rounded())   // projected annual
+        p.tdsPaid = payslips.map(\.tds).reduce(0,+)                     // YTD TDS from slips
+        let pf = payslips.map(\.pf).reduce(0,+)
+        if p.ded80C < pf { p.ded80C = min(150_000, pf * (12 / max(1, months))) }   // PF is 80C-eligible (projected)
+        p.seeded = true
+        taxProfile = p
+    }
     /// Advance-tax instalment cumulative percentages (15/45/75/100).
     static let advancePcts: [Double] = [0.15, 0.45, 0.75, 1.0]
     /// Derived from which instalments are marked paid.
@@ -229,15 +253,49 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Single source of truth for category spend (this month), applying transfer/refund rules.
+    /// Single source of truth for category spend, applying transfer/refund rules. Each category's
+    /// `spent` is the net spend within *its own* current cap cycle (monthly by default, but a
+    /// quarterly/annual/custom cap counts spend over that whole window — e.g. a yearly insurance cap).
     func recomputeSpent() {
-        let cal = Calendar.current, now = Date()
-        var totals: [String: Double] = [:]
-        for t in txns where cal.isDate(t.date, equalTo: now, toGranularity: .month) {
-            let c = spendContribution(t); if c != 0 { totals[t.category, default: 0] += c }
+        for i in categories.indices {
+            let (start, end) = cycleWindow(for: categories[i])
+            let name = categories[i].name
+            let total = txns.filter { $0.category == name && $0.date >= start && $0.date < end }
+                .map(spendContribution).reduce(0, +)
+            categories[i].spent = max(0, total)
         }
-        for i in categories.indices { categories[i].spent = max(0, totals[categories[i].name] ?? 0) }
         recomputeGoalProgress()   // bank-balance / txn changes can move asset-backed goal progress
+    }
+
+    /// First day of the financial year (Apr–Mar, India) containing `d`. Default cap-cycle anchor.
+    static func financialYearStart(_ d: Date = Date()) -> Date {
+        let cal = Calendar.current
+        let y = cal.component(.year, from: d)
+        let startYear = cal.component(.month, from: d) >= 4 ? y : y - 1
+        return cal.date(from: DateComponents(year: startYear, month: 4, day: 1)) ?? d
+    }
+
+    /// The [start, end) of the cap cycle that currently contains today, for category `c`. Monthly and
+    /// quarterly align to the calendar; annual/custom step from the category anchor (else the FY start).
+    func cycleWindow(for c: BudgetCategory) -> (Date, Date) {
+        let cal = Calendar.current, now = Date()
+        switch c.period {
+        case .monthly:
+            let start = cal.dateInterval(of: .month, for: now)?.start ?? now
+            return (start, cal.date(byAdding: .month, value: 1, to: start) ?? now)
+        case .quarterly:
+            let m = cal.component(.month, from: now)
+            let qStartMonth = ((m - 1) / 3) * 3 + 1
+            let start = cal.date(from: DateComponents(year: cal.component(.year, from: now), month: qStartMonth, day: 1)) ?? now
+            return (start, cal.date(byAdding: .month, value: 3, to: start) ?? now)
+        case .annual, .custom:
+            let len = c.periodMonths
+            let anchor = c.anchor ?? Self.financialYearStart(now)
+            let monthsSince = cal.dateComponents([.month], from: anchor, to: now).month ?? 0
+            let k = max(0, monthsSince / len)
+            let start = cal.date(byAdding: .month, value: k * len, to: anchor) ?? anchor
+            return (start, cal.date(byAdding: .month, value: len, to: start) ?? now)
+        }
     }
     var planMonths: [PlanMonth] {
         let cal = Calendar.current
@@ -274,9 +332,6 @@ final class Store: ObservableObject {
     func addCard(_ c: CreditCard) { cards.append(c); save() }
     func addCategory(_ c: BudgetCategory) { categories.append(c); save() }
     func addIncomeStream(_ s: IncomeStream) { incomeStreams.append(s); save() }
-    func setTax(total: Double, deductions: Double) {
-        taxTotal = total; self.deductions = deductions; save()
-    }
     func addInvestment(_ i: Investment) { investments.append(i); recomputeGoalProgress(); save() }
 
     func remove(category: BudgetCategory) {
@@ -506,7 +561,7 @@ final class Store: ObservableObject {
     /// running balance; statement/CSV/AA imports are historical and must not.
     @discardableResult
     func mergeSynced(accounts: [SyncedAccount], txns incoming: [SyncedTxn], adjustBalances: Bool = false,
-                     statementRecordId: UUID? = nil) -> Int {
+                     reconcile: Bool = false, statementRecordId: UUID? = nil) -> Int {
         for a in accounts { upsertAccount(a) }
         let known = Set(self.txns.compactMap(\.externalId))
         var added = 0
@@ -515,9 +570,15 @@ final class Store: ObservableObject {
             if s.source == .card { ensureCard(mask: s.accountMask, bankCode: s.bankCode) }
             else if s.source == .bank { ensureBank(mask: s.accountMask, bankCode: s.bankCode) }
 
+            let accName = accountName(forMask: s.accountMask, source: s.source)
+            // Statement imports reconcile against existing alert transactions by amount+date so the
+            // same event isn't stored twice with two different merchant spellings.
+            if reconcile, let i = duplicateBankIndex(for: s, accountName: accName) {
+                if txns[i].statementId == nil { enrichBank(&txns[i], with: s) }
+                continue   // already have this transaction — don't add, don't move the balance
+            }
             let merchant = s.merchant ?? Self.prettyMerchant(s.narration)
             let cl = classify(merchant: merchant, counterparty: s.counterparty, narration: s.narration, income: s.amount > 0)
-            let accName = accountName(forMask: s.accountMask, source: s.source)
             var tags = cl.tags
             if s.hasConflict { tags.append("Needs review") }
             let t = Txn(merchant: merchant, symbol: cl.symbol, category: cl.category, account: accName,
@@ -603,6 +664,44 @@ final class Store: ObservableObject {
         for i in txns.indices where txns[i].account == old { txns[i].account = new }
     }
 
+    /// Reconstruct a live bank balance from a statement's stated closing: add every transaction for
+    /// this account dated strictly after the statement's as-of date. This is why a May-31 statement
+    /// no longer pins the balance to May when June alerts already arrived. Called *before* the
+    /// statement's own (≤ asOf) transactions are inserted, so they're never double-counted.
+    private func liveBalance(statedBalance: Double, asOf: Date?, accountName: String) -> Double {
+        guard let asOf else { return statedBalance }
+        let later = txns.filter { $0.account == accountName && $0.date > asOf }.map(\.amount).reduce(0, +)
+        return statedBalance + later
+    }
+
+    /// Finds an existing transaction that is the same real-world event as `s` regardless of merchant
+    /// text (alert vs statement spell the payee differently): same account, same sign, equal amount,
+    /// within a few days. Used to stop bank statements from duplicating Gmail alert transactions.
+    private func duplicateBankIndex(for s: SyncedTxn, accountName: String) -> Int? {
+        let target = abs(s.amount), inc = s.amount > 0
+        var best: Int? = nil, bestDelta = Double.greatestFiniteMagnitude
+        for (i, t) in txns.enumerated() where t.account == accountName && t.income == inc {
+            guard t.externalId != s.externalId, abs(abs(t.amount) - target) < 0.01 else { continue }
+            let delta = abs(t.date.timeIntervalSince(s.date))
+            if delta <= 4 * 86400, delta < bestDelta { best = i; bestDelta = delta }
+        }
+        return best
+    }
+    /// Enrich a prior alert transaction with a bank statement's better data (cleaner merchant,
+    /// category, tags) and mark it statement-confirmed. Unlike `enrich`, never forces `.card`.
+    private func enrichBank(_ t: inout Txn, with s: SyncedTxn) {
+        if let m = s.merchant, !m.isEmpty, m.count > t.merchant.count { t.merchant = m }
+        if let c = s.category, !c.isEmpty {
+            t.category = c
+            t.symbol = categories.first { $0.name == c }?.symbol ?? Self.symbolFor(c)
+        }
+        if (t.counterparty ?? "").isEmpty, let cp = s.counterparty { t.counterparty = cp }
+        let cl = classify(merchant: t.merchant, counterparty: t.counterparty, narration: s.narration, income: t.amount > 0)
+        t.tags = Self.uniq(t.tags + cl.tags)
+        if cl.transfer { t.transfer = true }
+        if t.statementId == nil { t.statementId = s.externalId }
+    }
+
     /// Unique, ordered bank + card display names for pickers.
     var accountNames: [String] {
         var seen = Set<String>()
@@ -649,7 +748,7 @@ final class Store: ObservableObject {
             n += res.added + res.enriched
         }
         let bankTxns = r.txns.filter { t in !cards.contains { $0.mask == t.accountMask } }
-        if !banks.isEmpty || !bankTxns.isEmpty { n += mergeSynced(accounts: banks, txns: bankTxns, statementRecordId: rid) }
+        if !banks.isEmpty || !bankTxns.isEmpty { n += mergeSynced(accounts: banks, txns: bankTxns, reconcile: true, statementRecordId: rid) }
         let depAdded = mergeDeposits(r.deposits)
         // Finalise & record the statement so it shows in the ledger and its txns can be cascade-deleted.
         if var rec = record {
@@ -731,7 +830,9 @@ final class Store: ObservableObject {
             return
         }
         if let i = banks.firstIndex(where: { $0.mask == a.mask }) {
-            if a.balance != 0 { banks[i].balance = a.balance }
+            // A statement's closing balance is stated *as of* its period end. Don't clobber a newer
+            // live balance with it — reconstruct by adding transactions dated after the statement.
+            if a.balance != 0 { banks[i].balance = liveBalance(statedBalance: a.balance, asOf: a.asOf, accountName: banks[i].name) }
             if banks[i].bankCode == nil { banks[i].bankCode = a.bankCode }
             if banks[i].ifsc == nil { banks[i].ifsc = a.ifsc }
             if banks[i].branch == nil { banks[i].branch = a.branch }
@@ -925,7 +1026,8 @@ final class Store: ObservableObject {
         var conflicts: [DataConflict] = []
         var nwHistory: [Double] = []
         var fxRates: [String: Double] = ["INR": 1]
-        var deductions = 0.0, taxTotal = 0.0
+        var taxProfile = TaxProfile()
+        var payslips: [Payslip] = []
         var advanceTaxPaidStages: [Int] = []
         var merchantRules: [String: String] = [:]
 
@@ -946,8 +1048,8 @@ final class Store: ObservableObject {
             conflicts  = c.decode(.conflicts, default: [])
             nwHistory  = c.decode(.nwHistory, default: [])
             fxRates    = c.decode(.fxRates, default: ["INR": 1])
-            deductions = c.decode(.deductions, default: 0)
-            taxTotal   = c.decode(.taxTotal, default: 0)
+            taxProfile = c.decode(.taxProfile, default: TaxProfile())
+            payslips   = c.decode(.payslips, default: [])
             advanceTaxPaidStages = c.decode(.advanceTaxPaidStages, default: [])
             merchantRules = c.decode(.merchantRules, default: [:])
         }
@@ -959,7 +1061,7 @@ final class Store: ObservableObject {
         p.deposits = deposits; p.goals = goals; p.milestones = milestones; p.badges = badges
         p.incomeStreams = incomeStreams; p.investments = investments; p.nwHistory = nwHistory
         p.statements = statements; p.conflicts = conflicts
-        p.fxRates = fxRates; p.deductions = deductions; p.taxTotal = taxTotal
+        p.fxRates = fxRates; p.taxProfile = taxProfile; p.payslips = payslips
         p.advanceTaxPaidStages = Array(advanceTaxPaidStages)
         p.merchantRules = merchantRules
         return p
@@ -971,7 +1073,7 @@ final class Store: ObservableObject {
         incomeStreams = p.incomeStreams; investments = p.investments; nwHistory = p.nwHistory
         statements = p.statements; conflicts = p.conflicts
         fxRates = p.fxRates.isEmpty ? ["INR": 1] : p.fxRates
-        deductions = p.deductions; taxTotal = p.taxTotal
+        taxProfile = p.taxProfile; payslips = p.payslips
         advanceTaxPaidStages = Set(p.advanceTaxPaidStages)
         merchantRules = p.merchantRules
         if milestones.isEmpty { milestones = Self.defaultMilestones() }
@@ -1050,7 +1152,7 @@ final class Store: ObservableObject {
         categories = []; txns = []; banks = []; cards = []; deposits = []; goals = []
         investments = []; incomeStreams = []; nwHistory = []
         statements = []; conflicts = []
-        deductions = 0; taxTotal = 0; advanceTaxPaidStages = []; merchantRules = [:]
+        taxProfile = TaxProfile(); payslips = []; advanceTaxPaidStages = []; merchantRules = [:]
         fxRates = ["INR": 1]
         milestones = Self.defaultMilestones()
         badges = Self.defaultBadges()

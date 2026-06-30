@@ -1003,6 +1003,7 @@ struct SettingsSheet: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var gmail: GmailManager
     @EnvironmentObject var sync: SyncManager
+    @EnvironmentObject var ai: AIManager
     @Environment(\.dismiss) private var dismiss
     @State private var showExportJSON = false
     @State private var showExportCSV = false
@@ -1056,7 +1057,7 @@ struct SettingsSheet: View {
 
     /// Full wipe: store data + preferences, Gmail account/statements, and Setu credentials.
     private func performClear() {
-        store.clearAll(); gmail.reset(); sync.reset(); message = "All data cleared"
+        store.clearAll(); gmail.reset(); sync.reset(); ai.reset(); message = "All data cleared"
     }
 
     @ViewBuilder private var profileHeader: some View {
@@ -1107,6 +1108,7 @@ struct SettingsSheet: View {
             }
             Button { store.recategorizeAll(); message = "Re-scanned categories" } label: { Label("Re-scan categories", systemImage: "wand.and.stars") }
             NavigationLink { GmailSettingsView() } label: { Label("Email auto-import · Gmail", systemImage: "envelope.badge") }
+            NavigationLink { AISettingsView() } label: { Label("AI insights & providers", systemImage: "sparkles") }
             Toggle(isOn: $store.accountAggregatorEnabled) { Label("Account Aggregator (Setu)", systemImage: "building.columns") }
             if store.accountAggregatorEnabled {
                 NavigationLink { BankSyncSettingsView() } label: { Label("Bank sync settings", systemImage: "gearshape") }
@@ -1187,6 +1189,8 @@ struct GmailSettingsView: View {
                     Label("Gmail connected", systemImage: "checkmark.seal.fill").foregroundStyle(Zen.greenDeep)
                     Button { gmail.scan(into: store) } label: { Label("Scan emails now", systemImage: "envelope.arrow.triangle.branch") }
                         .disabled(gmail.isWorking)
+                    Button { gmail.rescanAll(into: store) } label: { Label("Re-scan all emails", systemImage: "arrow.clockwise") }
+                        .disabled(gmail.isWorking)
                     Button(role: .destructive) { gmail.disconnect() } label: { Label("Disconnect", systemImage: "xmark.circle") }
                 } else {
                     Button { gmail.connect() } label: { Label("Connect Gmail", systemImage: "envelope.badge") }
@@ -1203,7 +1207,7 @@ struct GmailSettingsView: View {
                 }.onChange(of: gmail.scanDays) { _, _ in gmail.saveConfig() }
                 if let d = gmail.lastScan { LabeledContent("Last scan", value: d.formatted(date: .abbreviated, time: .shortened)) }
             } header: { Text("Scan window") } footer: {
-                Text("Auto-scan refreshes on app open and periodically in the background (about once a day, when iOS allows).")
+                Text("Auto-scan refreshes on app open (hourly at most) and periodically in the background when iOS allows. Already-scanned emails are skipped, so re-scans are quick. Use “Re-scan all” to re-read everything in the window.")
             }
 
             Section {
@@ -1459,10 +1463,17 @@ struct AddCategorySheet: View {
     @State private var name = ""
     @State private var plan: Double = 0
     @State private var symbol = "cart.fill"
+    @State private var period: BudgetPeriod = .monthly
+    @State private var customMonths = 6
+    @State private var hasAnchor = false
+    @State private var anchor = Store.financialYearStart()
     @State private var loaded = false
-    private let symbols = ["house.fill","cart.fill","fork.knife","car.fill","bag.fill","heart.fill","play.rectangle.fill","graduationcap.fill","airplane","gift.fill","pawprint.fill","gamecontroller.fill"]
+    private let symbols = ["house.fill","cart.fill","fork.knife","car.fill","bag.fill","heart.fill","play.rectangle.fill","graduationcap.fill","airplane","gift.fill","pawprint.fill","gamecontroller.fill","shield.lefthalf.filled"]
     private let colors = ["6E9BD8","7FC4A3","5BA585","4F7FC4","9AA7BE"]
     private var isSystem: Bool { editing?.isSystem ?? false }
+    private var budgetLabel: String { period == .monthly ? "Monthly budget" : "Budget / \(period == .custom ? "\(max(1,customMonths)) months" : period.noun)" }
+    private var perMonth: Double { plan / Double(period == .custom ? max(1, customMonths) : period.months) }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -1473,10 +1484,30 @@ struct AddCategorySheet: View {
                     } else {
                         LabeledField(label: "Category name", placeholder: "e.g. Groceries", text: $name)
                     }
-                    LabeledAmountField(label: "Monthly budget", amount: $plan)
+                    LabeledAmountField(label: budgetLabel, amount: $plan)
                 } footer: {
                     if isSystem { Text("This is a built-in category — its name can't be changed, but you can set its budget and icon.") }
                 }
+
+                Section {
+                    Picker("Cap period", selection: $period) {
+                        ForEach(BudgetPeriod.allCases) { Text($0.label).tag($0) }
+                    }
+                    if period == .custom {
+                        Stepper("Every \(customMonths) month\(customMonths == 1 ? "" : "s")", value: $customMonths, in: 1...36)
+                    }
+                    if period == .annual || period == .custom {
+                        Toggle("Set a cycle start date", isOn: $hasAnchor)
+                        if hasAnchor {
+                            DatePicker("Cycle starts", selection: $anchor, displayedComponents: .date)
+                        }
+                    }
+                } header: { Text("Cap window") } footer: {
+                    Text(period == .monthly
+                         ? "Spending resets at the start of each month."
+                         : "Tracks spend across the whole \(period == .custom ? "\(max(1,customMonths))-month" : period.noun) window — useful for insurance, fees or yearly subscriptions. ≈ \(INR.compact(perMonth))/month against your overall plan." + (hasAnchor ? "" : " Cycle aligns to the financial year (Apr–Mar) unless you set a start date."))
+                }
+
                 if let e = editing, !isSystem { DeleteSheetButton(noun: "category") { store.remove(category: e); dismiss() } }
             }
             .zenForm().navigationTitle(editing == nil ? "Add category" : "Edit category").navigationBarTitleDisplayMode(.inline)
@@ -1487,7 +1518,9 @@ struct AddCategorySheet: View {
                         let c = BudgetCategory(id: editing?.id ?? UUID(), name: name.isEmpty ? "Category" : name,
                                                symbol: symbol, spent: editing?.spent ?? 0, plan: plan,
                                                color: editing?.color ?? (colors.randomElement() ?? "6E9BD8"),
-                                               isSystem: editing?.isSystem ?? false)
+                                               isSystem: editing?.isSystem ?? false,
+                                               period: period, customMonths: max(1, customMonths),
+                                               anchor: (period == .annual || period == .custom) && hasAnchor ? anchor : nil)
                         if editing == nil { store.addCategory(c) } else { store.update(c) }
                         dismiss()
                     }.fontWeight(.semibold)
@@ -1496,6 +1529,8 @@ struct AddCategorySheet: View {
             .onAppear {
                 guard !loaded, let e = editing else { loaded = true; return }; loaded = true
                 name = e.name; plan = e.plan; symbol = e.symbol
+                period = e.period; customMonths = e.customMonths
+                if let a = e.anchor { anchor = a; hasAnchor = true }
             }
         }
     }
@@ -1570,30 +1605,151 @@ struct AddIncomeStreamSheet: View {
     }
 }
 
-// MARK: - Edit tax (manual)
-struct EditTaxSheet: View {
+// MARK: - Tax profile (track, regime, income, deductions)
+struct TaxProfileSheet: View {
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) private var dismiss
-    @State private var total: Double = 0
-    @State private var deductions: Double = 0
+    @State private var p = TaxProfile()
+    @State private var loaded = false
+
+    private var preview: TaxComputation { TaxEngine.compute(p) }
+    private var showSalary: Bool { p.track == .salaried || p.track == .mixed }
+    private var showProfessional: Bool { p.track == .selfEmployed || p.track == .mixed }
+    private var showBusiness: Bool { p.track == .business || p.track == .mixed }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledAmountField(label: "Estimated annual tax", amount: $total)
-                    LabeledAmountField(label: "80C / 80D deductions", amount: $deductions)
-                } footer: {
-                    Text("Income streams feed the 44ADA presumptive calculation. Mark each advance-tax instalment as paid on the Income & Tax screen.")
+                    Picker("I earn as", selection: $p.track) {
+                        ForEach(IncomeTrack.allCases) { Text($0.label).tag($0) }
+                    }
+                    Text(p.track.blurb).font(.caption).foregroundStyle(Zen.ink3)
+                } header: { Text("Track") }
+
+                if showSalary {
+                    Section("Salary") {
+                        LabeledAmountField(label: "Gross annual salary", amount: $p.grossSalary)
+                        LabeledAmountField(label: "TDS already deducted", amount: $p.tdsPaid)
+                        LabeledAmountField(label: "Employer NPS 80CCD(2)", amount: $p.employerNPS)
+                    }
                 }
+                if showProfessional {
+                    Section { LabeledAmountField(label: "Professional receipts (gross)", amount: $p.professionalReceipts) }
+                    header: { Text("Profession — 44ADA") }
+                    footer: { Text("Presumptive income taxed = 50% of receipts (₹\(INR.compact(p.professionalReceipts * 0.5))).") }
+                }
+                if showBusiness {
+                    Section {
+                        LabeledAmountField(label: "Business turnover", amount: $p.businessTurnover)
+                        VStack(alignment: .leading) {
+                            Text("Digital receipts: \(Int(p.businessDigitalShare * 100))%").font(.caption).foregroundStyle(Zen.ink2)
+                            Slider(value: $p.businessDigitalShare, in: 0...1)
+                        }
+                    } header: { Text("Business — 44AD") }
+                    footer: { Text("Presumptive profit = 6% digital + 8% cash (₹\(INR.compact(TaxEngine.presumptive44AD(turnover: p.businessTurnover, digitalShare: p.businessDigitalShare)))).") }
+                }
+
+                Section("Other income") {
+                    LabeledAmountField(label: "Interest, rent, etc.", amount: $p.otherIncome)
+                    LabeledAmountField(label: "Advance tax paid (self)", amount: $p.advanceTaxPaid)
+                }
+
+                Section {
+                    Toggle("Auto-pick cheaper regime", isOn: $p.autoPickRegime)
+                    if !p.autoPickRegime {
+                        Picker("Regime", selection: $p.regime) { ForEach(TaxRegime.allCases) { Text($0.label).tag($0) } }
+                            .pickerStyle(.segmented)
+                    }
+                } header: { Text("Regime") } footer: {
+                    Text("Recommended: \(preview.recommended.label) — ₹\(INR.compact((preview.recommended == .new ? preview.newRegime : preview.oldRegime).totalTax)) vs ₹\(INR.compact((preview.recommended == .new ? preview.oldRegime : preview.newRegime).totalTax)).")
+                }
+
+                Section {
+                    LabeledAmountField(label: "80C (PF, ELSS, LIC…)", amount: $p.ded80C)
+                    LabeledAmountField(label: "80D (health insurance)", amount: $p.ded80D)
+                    LabeledAmountField(label: "80CCD(1B) NPS", amount: $p.ded80CCD1B)
+                    LabeledAmountField(label: "Home-loan interest 24(b)", amount: $p.dedHomeLoanInterest)
+                    LabeledAmountField(label: "HRA exemption", amount: $p.dedHRA)
+                    LabeledAmountField(label: "Other (80G, 80E…)", amount: $p.otherDeductions)
+                } header: { Text("Old-regime deductions") } footer: {
+                    Text("Used only in the old-regime estimate (and the comparison). The new regime ignores these except employer NPS.")
+                }
+
+                Section {
+                    HStack { Text("Estimated tax").foregroundStyle(Zen.ink2); Spacer()
+                        Text(INR.compact(preview.totalTax)).fontWeight(.bold).foregroundStyle(Zen.ink) }
+                    HStack { Text("Balance after TDS/advance").foregroundStyle(Zen.ink2); Spacer()
+                        Text(INR.compact(preview.balanceDue)).fontWeight(.bold).foregroundStyle(Zen.accentDeep) }
+                } footer: { Text("Indicative only — not tax advice. FY 2025-26 individual slabs.") }
             }
-            .zenForm().navigationTitle("Tax details").navigationBarTitleDisplayMode(.inline)
+            .zenForm().navigationTitle("Tax setup").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { store.setTax(total: total, deductions: deductions); dismiss() }.fontWeight(.semibold)
+                    Button("Save") { p.seeded = true; store.updateTaxProfile(p); dismiss() }.fontWeight(.semibold)
                 }
             }
-            .onAppear { total = store.taxTotal; deductions = store.deductions }
+            .onAppear { guard !loaded else { return }; loaded = true; p = store.taxProfile }
+        }
+    }
+}
+
+// MARK: - Add / import a payslip
+struct AddPayslipSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @State private var slip = Payslip()
+    @State private var showPicker = false
+    @State private var error: String?
+    @State private var imported = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Button { showPicker = true } label: { Label("Import from PDF", systemImage: "doc.badge.plus") }
+                    if imported { Label("Read from payslip — check the figures below", systemImage: "checkmark.seal.fill").font(.caption).foregroundStyle(Zen.greenDeep) }
+                    if let error { Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(Zen.caution) }
+                } footer: { Text("Best-effort read of common Indian payslip layouts. Anything it misses, fill in below.") }
+
+                Section("Slip") {
+                    LabeledField(label: "Employer", placeholder: "Company", text: $slip.employer)
+                    DatePicker("Month", selection: $slip.period, displayedComponents: .date)
+                }
+                Section("Earnings") {
+                    LabeledAmountField(label: "Basic", amount: $slip.basic)
+                    LabeledAmountField(label: "HRA", amount: $slip.hra)
+                    LabeledAmountField(label: "Allowances", amount: $slip.allowances)
+                    LabeledAmountField(label: "Gross earnings", amount: $slip.grossEarnings)
+                }
+                Section("Deductions") {
+                    LabeledAmountField(label: "PF (80C)", amount: $slip.pf)
+                    LabeledAmountField(label: "Professional tax", amount: $slip.profTax)
+                    LabeledAmountField(label: "TDS / income tax", amount: $slip.tds)
+                    LabeledAmountField(label: "Net pay", amount: $slip.netPay)
+                }
+            }
+            .zenForm().navigationTitle("Add payslip").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { store.addPayslip(slip); dismiss() }.fontWeight(.semibold)
+                        .disabled(slip.grossEarnings <= 0 && slip.netPay <= 0)
+                }
+            }
+            .fileImporter(isPresented: $showPicker, allowedContentTypes: [.pdf]) { result in
+                error = nil
+                switch result {
+                case .success(let url):
+                    let ok = url.startAccessingSecurityScopedResource()
+                    defer { if ok { url.stopAccessingSecurityScopedResource() } }
+                    guard let data = try? Data(contentsOf: url) else { error = "Couldn't read that file"; return }
+                    if let parsed = PayslipParser.parse(data: data) { slip = parsed; imported = true }
+                    else { error = "Couldn't read a payslip from that PDF — enter the figures manually." }
+                case .failure(let e): error = e.localizedDescription
+                }
+            }
         }
     }
 }
