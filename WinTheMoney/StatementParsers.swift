@@ -17,6 +17,25 @@ enum StatementParser {
         return .generic
     }
 
+    /// True if the PDF is a loan **foreclosure / pre-closure / pre-payment / settlement**
+    /// statement rather than an account or card statement. These list payable figures
+    /// (outstanding principal, termination interest, prepayment charges) — never running
+    /// transactions — so they must be rejected before any parser turns those amounts into
+    /// bogus txns. Each marker below is loan-closure-specific and never appears in a
+    /// savings / current / credit-card statement, so a single hit is conclusive.
+    static func isLoanClosureStatement(_ text: String) -> Bool {
+        let t = text.lowercased()
+        let markers = [
+            "foreclosure", "fore closure", "fore-closure",
+            "pre-closure", "preclosure", "pre closure",
+            "per day interest on termination", "interest on termination",
+            "interest till date of prepayment", "prepayment charges",
+            "outstanding principal", "principal outstanding",
+            "pending installments", "pending instalments",
+        ]
+        return markers.contains { t.contains($0) }
+    }
+
     static func parse(_ text: String) -> [SyncedTxn] {
         let result: [SyncedTxn]
         switch detectBank(text) {

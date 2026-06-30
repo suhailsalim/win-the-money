@@ -68,9 +68,13 @@ enum GmailProvider {
         let from = issuers.map { "from:\($0)" }.joined(separator: " OR ")
         let exclude = ["indmoney", "paytmmoney", "groww", "zerodha", "kuvera", "smallcase", "cams", "kfintech",
                        "camsonline", "mfcentral", "nsdl", "cdsl"].map { "-from:\($0)" }.joined(separator: " ")
+        // Loan foreclosure / pre-payment statements carry "Statement" in the subject but list
+        // payable figures, not transactions — exclude them here too (content guard backstops this).
+        let closure = "-subject:foreclosure -subject:foreclose -subject:\"pre-payment\" " +
+                      "-subject:prepayment -subject:\"pre-closure\" -subject:preclosure"
         return "newer_than:\(days)d has:attachment filename:pdf (\(from)) " +
                "subject:(statement OR e-statement OR \"account statement\" OR \"credit card statement\") " +
-               "\(exclude) -subject:portfolio -subject:holdings -subject:\"capital gains\""
+               "\(exclude) \(closure) -subject:portfolio -subject:holdings -subject:\"capital gains\""
     }
 
     static func fetchStatements(accessToken token: String, days: Int) async throws -> [StatementMail] {
