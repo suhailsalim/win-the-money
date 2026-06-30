@@ -101,7 +101,9 @@ final class GmailManager: NSObject, ObservableObject {
                 if processed.contains(key) || pending.contains(where: { $0.messageId == m.messageId && $0.attachmentId == m.attachmentId }) { continue }
                 let data = try await GmailProvider.downloadAttachment(accessToken: token, messageId: m.messageId, attachmentId: m.attachmentId)
                 if let r = tryParse(data: data, passwords: vault) {
-                    store.mergeImport(r); markProcessed(key); imported += 1
+                    let rec = StatementRecord(fileName: m.filename.isEmpty ? "Statement" : m.filename,
+                                              source: "Gmail", importedAt: Date(), gmailKey: key)
+                    store.mergeImport(r, record: rec); markProcessed(key); imported += 1
                 } else if StatementImporter.isLocked(data: data) {
                     addPending(m, data: data)            // couldn't unlock with a saved password
                 }
@@ -124,7 +126,8 @@ final class GmailManager: NSObject, ObservableObject {
     func importPending(_ p: PendingStatement, password: String, into store: Store) -> Bool {
         guard let data = try? Data(contentsOf: Self.cacheDir.appendingPathComponent(p.cacheFile)) else { return false }
         guard let r = try? StatementImporter.parse(data: data, password: password) else { return false }
-        store.mergeImport(r)
+        store.mergeImport(r, record: StatementRecord(fileName: p.filename.isEmpty ? "Statement" : p.filename,
+                                                     source: "Gmail", importedAt: Date(), gmailKey: p.id))
         StatementVault.add(password)                     // remember it for next time
         markProcessed(p.id)                              // never re-fetch/re-queue it
         removePending(p)

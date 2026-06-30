@@ -158,7 +158,13 @@ struct TransactionsSheet: View {
         HStack(spacing: 12) {
             IconChip(symbol: t.symbol)
             VStack(alignment: .leading, spacing: 3) {
-                Text(t.merchant).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                HStack(spacing: 5) {
+                    if t.needsReview {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2).foregroundStyle(Color(hex: "9AA7BE"))
+                    }
+                    Text(t.merchant).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                }
                 Text("\(t.category) · \(t.account) · \(t.date.formatted(.dateTime.day().month()))")
                     .font(.caption2).foregroundStyle(Zen.ink3).lineLimit(1)
                 if !t.tags.isEmpty || t.transfer {
@@ -350,7 +356,7 @@ struct LogTxnSheet: View {
                             store.update(Txn(id: e.id, merchant: merchant.isEmpty ? "Transaction" : merchant, symbol: sym,
                                              category: cat, account: account, amount: amt, date: date, externalId: e.externalId,
                                              source: e.source, counterparty: e.counterparty, statementId: e.statementId,
-                                             tags: tags, transfer: transfer))
+                                             statementRecordId: e.statementRecordId, tags: tags, transfer: transfer))
                         } else {
                             store.logTxn(Txn(merchant: merchant.isEmpty ? "Transaction" : merchant, symbol: sym,
                                              category: cat, account: account, amount: amt, date: date,
@@ -461,11 +467,14 @@ struct UploadSheet: View {
             do {
                 let ext = url.pathExtension.lowercased()
                 let isSpreadsheet = ["csv", "tsv", "txt", "xlsx", "xls"].contains(ext)
+                let fileName = url.lastPathComponent
                 let n: Int
                 if isSpreadsheet {
-                    n = store.mergeSynced(accounts: [], txns: try SpreadsheetImporter.parse(url: url))
+                    let txns = try SpreadsheetImporter.parse(url: url)
+                    n = store.mergeImport(ImportResult(txns: txns), record: StatementRecord(fileName: fileName, source: "Spreadsheet"))
                 } else {
-                    n = store.mergeImport(try StatementImporter.parse(url: url, password: password.isEmpty ? nil : password))
+                    let result = try StatementImporter.parse(url: url, password: password.isEmpty ? nil : password)
+                    n = store.mergeImport(result, record: StatementRecord(fileName: fileName, source: "Imported file"))
                 }
                 await MainActor.run { parsing = false; needsPassword = false; added = n }
             } catch StatementError.wrongPassword {
@@ -490,8 +499,12 @@ struct AddGoalSheet: View {
     @State private var monthly: Double = 0
     @State private var deadline = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
     @State private var symbol = "star"
+    @State private var allocations: [GoalAllocation] = []
+    @State private var showAssetPicker = false
     @State private var loaded = false
     private let symbols = ["star","airplane","car","house","gift","laptopcomputer","heart","graduationcap","iphone","shield.lefthalf.filled"]
+
+    private var allocTotal: Double { allocations.reduce(0) { $0 + store.allocationValue($1) } }
 
     var body: some View {
         NavigationStack {
@@ -500,9 +513,35 @@ struct AddGoalSheet: View {
                 Section {
                     LabeledField(label: "Title", placeholder: "e.g. Emergency fund", text: $title)
                     LabeledAmountField(label: "Target", amount: $target)
-                    LabeledAmountField(label: "Saved so far", amount: $saved)
+                    if allocations.isEmpty {
+                        LabeledAmountField(label: "Saved so far", amount: $saved)
+                    } else {
+                        HStack {
+                            Text("Saved so far").foregroundStyle(Zen.ink2)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(INR.full(allocTotal)).font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                                Text("from \(allocations.count) asset\(allocations.count == 1 ? "" : "s")")
+                                    .font(.caption2).foregroundStyle(Zen.ink3)
+                            }
+                        }
+                    }
                     LabeledAmountField(label: "Monthly", amount: $monthly)
                     DatePicker("Target date", selection: $deadline, displayedComponents: .date)
+                }
+                Section {
+                    ForEach(allocations) { a in
+                        allocationRow(a)
+                    }
+                    .onDelete { idx in allocations.remove(atOffsets: idx) }
+                    Button { showAssetPicker = true } label: {
+                        Label("Allocate an asset", systemImage: "plus.circle")
+                    }
+                } header: { Text("Backing assets") }
+                footer: {
+                    Text(allocations.isEmpty
+                         ? "Link FDs/RDs, investments, a bank balance, or cash. Progress then tracks their live value."
+                         : "Saved updates automatically from these assets' current value.")
                 }
                 if let e = editing { DeleteSheetButton(noun: "goal") { store.remove(goal: e); dismiss() } }
             }
@@ -513,18 +552,196 @@ struct AddGoalSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(editing == nil ? "Create" : "Save") {
                         let g = Goal(id: editing?.id ?? UUID(), title: title.isEmpty ? "New goal" : title, symbol: symbol,
-                                     saved: saved, target: target > 0 ? target : 100000, monthly: monthly,
-                                     deadline: deadline, status: editing?.status ?? .onTrack)
+                                     saved: allocations.isEmpty ? saved : allocTotal, target: target > 0 ? target : 100000,
+                                     monthly: monthly, deadline: deadline, status: editing?.status ?? .onTrack,
+                                     allocations: allocations)
                         if editing == nil { store.addGoal(g) } else { store.update(g) }
                         dismiss()
                     }.fontWeight(.semibold)
                 }
             }
+            .sheet(isPresented: $showAssetPicker) {
+                AssetAllocationPicker(existing: allocations) { allocations.append($0) }
+            }
             .onAppear {
                 guard !loaded, let e = editing else { loaded = true; return }; loaded = true
                 title = e.title; target = e.target; saved = e.saved
                 monthly = e.monthly; deadline = e.deadline; symbol = e.symbol
+                allocations = e.allocations
             }
+        }
+    }
+
+    @ViewBuilder private func allocationRow(_ a: GoalAllocation) -> some View {
+        let idx = allocations.firstIndex { $0.id == a.id }
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 10) {
+                Image(systemName: a.kind.symbol).font(.caption).foregroundStyle(Zen.accentDeep).frame(width: 22)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(store.assetName(a)).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink).lineLimit(1)
+                    Text(a.kind.label).font(.caption2).foregroundStyle(Zen.ink3)
+                }
+                Spacer()
+                Text(INR.compact(store.allocationValue(a))).font(.caption.weight(.bold)).foregroundStyle(Zen.ink)
+            }
+            if let idx {
+                if a.kind == .cash {
+                    LabeledAmountField(label: "Amount", amount: Binding(get: { allocations[idx].amount },
+                                                                        set: { allocations[idx].amount = $0 }))
+                } else {
+                    HStack(spacing: 10) {
+                        Slider(value: Binding(get: { allocations[idx].percent }, set: { allocations[idx].percent = $0 }), in: 0...100, step: 5)
+                        Text("\(Int(a.percent))%").font(.caption.weight(.bold)).foregroundStyle(Zen.ink2).frame(width: 42, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Asset allocation picker (add one backing asset to a goal)
+struct AssetAllocationPicker: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    var existing: [GoalAllocation] = []
+    var onAdd: (GoalAllocation) -> Void
+
+    @State private var cashAmount: Double = 0
+    @State private var cashNote = ""
+
+    private func used(_ kind: AllocationKind, _ id: UUID) -> Bool {
+        existing.contains { $0.kind == kind && $0.assetId == id }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if !store.deposits.isEmpty {
+                    Section("Deposits") {
+                        ForEach(store.deposits) { d in
+                            assetRow(kind: .deposit, id: d.id, title: "\(d.bank) \(d.tag)",
+                                     sub: d.maturesText, value: d.current)
+                        }
+                    }
+                }
+                if !store.investments.isEmpty {
+                    Section("Investments") {
+                        ForEach(store.investments) { inv in
+                            assetRow(kind: .investment, id: inv.id, title: inv.name,
+                                     sub: inv.kind.label, value: inv.currentValue)
+                        }
+                    }
+                }
+                if !store.banks.isEmpty {
+                    Section("Bank balances") {
+                        ForEach(store.banks) { b in
+                            assetRow(kind: .bank, id: b.id, title: b.name, sub: "Balance", value: b.balance)
+                        }
+                    }
+                }
+                Section("Cash / manual") {
+                    LabeledField(label: "Label", placeholder: "e.g. Gold, EPF, savings", text: $cashNote)
+                    LabeledAmountField(label: "Amount", amount: $cashAmount)
+                    Button {
+                        onAdd(GoalAllocation(kind: .cash, percent: 100, amount: cashAmount, note: cashNote))
+                        dismiss()
+                    } label: { Label("Add cash amount", systemImage: "plus.circle") }
+                        .disabled(cashAmount <= 0)
+                }
+            }
+            .zenForm()
+            .navigationTitle("Allocate asset").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+    }
+
+    @ViewBuilder private func assetRow(kind: AllocationKind, id: UUID, title: String, sub: String, value: Double) -> some View {
+        let already = used(kind, id)
+        let committed = store.allocatedPercent(kind: kind, assetId: id)
+        Button {
+            // default to whatever share is still free (min 100% of remainder), at least show the picker default
+            let free = max(0, 100 - committed)
+            onAdd(GoalAllocation(kind: kind, assetId: id, percent: free > 0 ? min(100, free) : 100))
+            dismiss()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: kind.symbol).font(.caption).foregroundStyle(already ? Zen.ink3 : Zen.accentDeep).frame(width: 22)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(already ? Zen.ink3 : Zen.ink).lineLimit(1)
+                    Text(committed > 0 ? "\(sub) · \(Int(committed))% allocated elsewhere" : sub)
+                        .font(.caption2).foregroundStyle(Zen.ink3)
+                }
+                Spacer()
+                Text(INR.compact(value)).font(.caption.weight(.bold)).foregroundStyle(Zen.ink2)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(already)
+    }
+}
+
+// MARK: - Quick allocate one asset to a goal (no full form)
+struct QuickAllocateSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    let kind: AllocationKind
+    let assetId: UUID?
+    let assetName: String
+    let assetValue: Double
+    @State private var percent: Double = 100
+
+    private func allocatedHere(_ g: Goal) -> Bool {
+        g.allocations.contains { $0.kind == kind && $0.assetId == assetId }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        Image(systemName: kind.symbol).foregroundStyle(Zen.accentDeep)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(assetName).font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                            Text(INR.full(assetValue)).font(.caption2).foregroundStyle(Zen.ink3)
+                        }
+                    }
+                    if kind != .cash {
+                        HStack(spacing: 10) {
+                            Text("Allocate").foregroundStyle(Zen.ink2)
+                            Slider(value: $percent, in: 0...100, step: 5)
+                            Text("\(Int(percent))%").font(.caption.weight(.bold)).frame(width: 42, alignment: .trailing)
+                        }
+                    }
+                } footer: { Text("Pick a goal to back with \(kind == .cash ? "this amount" : "\(Int(percent))% of this asset").") }
+
+                if store.goals.isEmpty {
+                    Section { Text("No goals yet — create one first.").font(.caption).foregroundStyle(Zen.ink3) }
+                } else {
+                    Section("Goals") {
+                        ForEach(store.goals) { g in
+                            Button {
+                                store.addAllocation(GoalAllocation(kind: kind, assetId: assetId, percent: percent,
+                                                                   amount: kind == .cash ? assetValue : 0,
+                                                                   note: kind == .cash ? assetName : ""), to: g)
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    IconChip(symbol: g.symbol, size: 32)
+                                    Text(g.title).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                                    Spacer()
+                                    if allocatedHere(g) { Image(systemName: "checkmark.circle.fill").foregroundStyle(Zen.green) }
+                                    else { Image(systemName: "plus.circle").foregroundStyle(Zen.accentDeep) }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(allocatedHere(g))
+                        }
+                    }
+                }
+            }
+            .zenForm()
+            .navigationTitle("Allocate to goal").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
         }
     }
 }
@@ -873,6 +1090,21 @@ struct SettingsSheet: View {
             NavigationLink { AccountsView(embedded: true) } label: { Label("Manage accounts", systemImage: "creditcard") }
             NavigationLink { RecurringView() } label: { Label("Recurring transfers", systemImage: "arrow.triangle.2.circlepath") }
             NavigationLink { MerchantsView() } label: { Label("Merchants & rules", systemImage: "tag") }
+            NavigationLink { StatementsView() } label: {
+                Label("Imported statements", systemImage: "doc.text.magnifyingglass")
+                    .badge(store.statements.count)
+            }
+            NavigationLink { ConflictsView() } label: {
+                HStack {
+                    Label("Conflicts to review", systemImage: "exclamationmark.triangle")
+                    if !store.unresolvedConflicts.isEmpty {
+                        Spacer()
+                        Text("\(store.unresolvedConflicts.count)").font(.caption.weight(.bold))
+                            .foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(Color(hex: "9AA7BE"), in: Capsule())
+                    }
+                }
+            }
             Button { store.recategorizeAll(); message = "Re-scanned categories" } label: { Label("Re-scan categories", systemImage: "wand.and.stars") }
             NavigationLink { GmailSettingsView() } label: { Label("Email auto-import · Gmail", systemImage: "envelope.badge") }
             Toggle(isOn: $store.accountAggregatorEnabled) { Label("Account Aggregator (Setu)", systemImage: "building.columns") }
@@ -1427,5 +1659,102 @@ struct RecurringView: View {
             }
         }
         .zenForm().navigationTitle("Recurring transfers").navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Imported statements ledger (with cascade delete)
+struct StatementsView: View {
+    @EnvironmentObject var store: Store
+    @State private var pendingDelete: StatementRecord?
+
+    private var sorted: [StatementRecord] { store.statements.sorted { $0.importedAt > $1.importedAt } }
+
+    var body: some View {
+        Form {
+            if store.statements.isEmpty {
+                Section { Text("No statements imported yet. Import a PDF/CSV or connect Gmail, and each parsed statement is listed here.").font(.callout).foregroundStyle(Zen.ink3) }
+            }
+            ForEach(sorted) { s in
+                Section {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Image(systemName: "doc.text").foregroundStyle(Zen.accentDeep)
+                            Text(s.fileName).font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink).lineLimit(1)
+                        }
+                        Text("\(s.source) · \(s.importedAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2).foregroundStyle(Zen.ink3)
+                        if let acc = s.accountName { Text(acc).font(.caption2).foregroundStyle(Zen.ink3) }
+                        if let p = s.periodText { Text("Period: \(p)").font(.caption2).foregroundStyle(Zen.ink3) }
+                        HStack(spacing: 6) {
+                            TagPill(text: "\(s.txnCount) transaction\(s.txnCount == 1 ? "" : "s")")
+                            if s.depositCount > 0 { TagPill(text: "\(s.depositCount) deposit\(s.depositCount == 1 ? "" : "s")") }
+                        }.padding(.top, 2)
+                    }
+                    .swipeActions { Button(role: .destructive) { pendingDelete = s } label: { Label("Delete", systemImage: "trash") } }
+                }
+            }
+        }
+        .zenForm().navigationTitle("Imported statements").navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Delete this statement?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible) {
+            Button("Delete statement & its \(pendingDelete?.txnCount ?? 0) transaction\((pendingDelete?.txnCount ?? 0) == 1 ? "" : "s")", role: .destructive) {
+                if let s = pendingDelete { store.remove(statement: s) }; pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { Text("The transactions ingested from this statement are removed. Reconstructed deposits and manually-edited transactions are kept.") }
+    }
+}
+
+// MARK: - Conflicts to review (ingestion needs-review queue)
+struct ConflictsView: View {
+    @EnvironmentObject var store: Store
+    @State private var editing: Txn?
+
+    private var open: [DataConflict] { store.unresolvedConflicts.sorted { $0.createdAt > $1.createdAt } }
+
+    var body: some View {
+        Form {
+            if open.isEmpty {
+                Section { Text("Nothing to review. When a statement row is missing a date, amount, or merchant, it's imported with a placeholder and listed here so you can fix it.").font(.callout).foregroundStyle(Zen.ink3) }
+            } else {
+                Section {
+                    Text("These imported transactions need a manual fix. Tap one to correct it.").font(.caption).foregroundStyle(Zen.ink3)
+                }
+            }
+            ForEach(open) { c in
+                Section {
+                    Button {
+                        if let t = store.txn(for: c) { editing = t }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: 7) {
+                                Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(Color(hex: "9AA7BE"))
+                                Text("Missing \(c.field)").font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                                Spacer()
+                                if let t = store.txn(for: c) {
+                                    Text((t.income ? "+" : "−") + INR.compact(abs(t.amount))).font(.caption.weight(.bold)).foregroundStyle(Zen.ink2)
+                                }
+                            }
+                            Text(c.reason).font(.caption2).foregroundStyle(Zen.ink2)
+                            if let t = store.txn(for: c) {
+                                Text("\(t.merchant) · \(t.account) · \(t.date.formatted(.dateTime.day().month().year()))")
+                                    .font(.caption2).foregroundStyle(Zen.ink3).lineLimit(1)
+                            }
+                            if let s = store.statement(for: c) {
+                                Label(s.fileName, systemImage: "doc.text").font(.caption2).foregroundStyle(Zen.ink3).lineLimit(1)
+                            }
+                            if !c.context.isEmpty {
+                                Text(c.context).font(.caption2).foregroundStyle(Zen.ink3).lineLimit(2)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions {
+                        Button { store.resolve(conflict: c) } label: { Label("Dismiss", systemImage: "checkmark") }.tint(Zen.green)
+                    }
+                }
+            }
+        }
+        .zenForm().navigationTitle("Conflicts").navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $editing) { LogTxnSheet(editing: $0) }
     }
 }

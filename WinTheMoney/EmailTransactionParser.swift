@@ -33,7 +33,7 @@ enum EmailTransactionParser {
             let credit = text.lowercased().contains("reversal") || text.lowercased().contains("refund")
             return make(src, mask: g[3], amount: g[1], credit: credit, source: .card, bankCode: "AXIS",
                         counterparty: clean(g[2]), merchant: clean(g[2]), narration: "Axis Credit Card · \(g[2])",
-                        date: date(cap(#"Date[:\s]+(\d{2}[-/]\d{2}[-/]\d{2,4})"#, text, 1)?[1] ?? "") ?? headerDate)
+                        date: date(cap(#"Date(?:\s*&\s*Time)?\s*:?\s*(\d{2}[-/]\d{2}[-/]\d{2,4})"#, text, 1)?[1] ?? "") ?? headerDate)
         }
 
         // 4a) Scapia Federal — payment processed (spend)
@@ -79,10 +79,44 @@ enum EmailTransactionParser {
         var t = s.replacingOccurrences(of: #"(?is)<(script|style|head)[^>]*>.*?</\1>"#, with: " ", options: .regularExpression)
         t = t.replacingOccurrences(of: #"(?i)<br\s*/?>"#, with: " ", options: .regularExpression)
         t = t.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
-        for (e, r) in ["&amp;": "&", "&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&rsquo;": "'"] {
+        for (e, r) in ["&amp;": "&", "&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&rsquo;": "'", "&apos;": "'"] {
             t = t.replacingOccurrences(of: e, with: r)
         }
+        // Decode numeric character references (&#8202; thin/hair spaces, &#160; nbsp, &#x20B9; ₹, …);
+        // bank HTML alerts use these as table spacers between a label and its value.
+        t = decodeNumericEntities(t)
+        // Normalise every kind of space (NBSP, thin/hair/zero-width spaces, the U+FFFD replacement char
+        // a bad byte decodes to) to a plain space, so "INR<nbsp>924" / "Amount<hairspace>₹265" still match.
+        t = String(t.unicodeScalars.map { sc -> Character in
+            if sc == "\u{FFFD}" || sc.properties.isWhitespace || sc.properties.generalCategory == .format { return " " }
+            return Character(sc)
+        })
         return t.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Decodes `&#NNN;` and `&#xHH;` character references (bounded so stray "&#" text is left alone).
+    private static func decodeNumericEntities(_ s: String) -> String {
+        guard s.contains("&#") else { return s }
+        var out = String.UnicodeScalarView()
+        let scalars = Array(s.unicodeScalars)
+        var i = 0
+        while i < scalars.count {
+            if scalars[i] == "&", i + 1 < scalars.count, scalars[i + 1] == "#" {
+                var j = i + 2
+                var hex = false
+                if j < scalars.count, scalars[j] == "x" || scalars[j] == "X" { hex = true; j += 1 }
+                var digits = ""
+                while j < scalars.count, digits.count < 6, scalars[j] != ";" {
+                    digits.unicodeScalars.append(scalars[j]); j += 1
+                }
+                if j < scalars.count, scalars[j] == ";", !digits.isEmpty,
+                   let v = UInt32(digits, radix: hex ? 16 : 10), let sc = Unicode.Scalar(v) {
+                    out.append(sc); i = j + 1; continue
+                }
+            }
+            out.append(scalars[i]); i += 1
+        }
+        return String(out)
     }
     private static func money(_ s: String) -> Double? { Double(s.replacingOccurrences(of: ",", with: "")) }
     private static func clean(_ s: String) -> String {

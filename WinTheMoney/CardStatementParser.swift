@@ -47,6 +47,7 @@ enum CardStatementParser {
         // domestic rows: "dd/MM/yyyy|", international rows: "dd/MM/yyyy |" (space before pipe)
         let recs = records(lines, start: { matches(#"^\d{2}/\d{2}/\d{4}\s*\|"#, $0) }, stop: { hdfcNoise($0) })
         var txns: [SyncedTxn] = []
+        var lastDate: Date? = nil
         for g in recs {
             // first C-amount on the row (later "C…" tokens can be trailing summaries / refs)
             guard let amt = lastMoney(#"C\s*([\d,]+\.\d{2})"#, g, lazyFirst: true) else { continue }
@@ -55,8 +56,8 @@ enum CardStatementParser {
             m = replace(#"\(Ref#[^)]*\)"#, in: m, with: "")
             let merchant = tidy(m)
             let credit = creditByKeyword(g)
-            let date = parseDate(cap(#"^(\d{2}/\d{2}/\d{4})"#, g) ?? "", ["dd/MM/yyyy"]) ?? Date()
-            txns.append(mk("hdfc", date, merchant, amt, credit, mask, "HDFC"))
+            let (date, dateOK) = resolveDate(parseDate(cap(#"^(\d{2}/\d{2}/\d{4})"#, g) ?? "", ["dd/MM/yyyy"]), &lastDate)
+            txns.append(mk("hdfc", date, merchant, amt, credit, mask, "HDFC", dateResolved: dateOK, rawContext: g))
         }
         let rw = reward("Points", #"Reward Points[\s\S]{0,15}?([\d,]{2,})"#, text)
         return (cardAccount(.hdfc, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
@@ -73,12 +74,13 @@ enum CardStatementParser {
         let due = lastMoney(#"Total Payment Due[\s\S]{0,90}?\n\s*([\d,]+\.\d{2})"#, text, lazyFirst: true)
         let product = pickProduct(.axis, text)
         var txns: [SyncedTxn] = []
+        var lastDate: Date? = nil
         let rowRe = re(#"^(\d{2}/\d{2}/\d{4})\s+(.+?)\s+([\d,]+\.\d{2})\s+(Dr|Cr)$"#)
         for l in text.components(separatedBy: .newlines).map({ $0.trimmingCharacters(in: .whitespaces) }) {
             guard let g = match(rowRe, l), let v = money(g[3]) else { continue }
             let credit = g[4] == "Cr"
-            let date = parseDate(g[1], ["dd/MM/yyyy"]) ?? Date()
-            txns.append(mk("axis", date, tidy(g[2]), v, credit, mask, "AXIS", category: mapCategory(g[2])))
+            let (date, dateOK) = resolveDate(parseDate(g[1], ["dd/MM/yyyy"]), &lastDate)
+            txns.append(mk("axis", date, tidy(g[2]), v, credit, mask, "AXIS", category: mapCategory(g[2]), dateResolved: dateOK, rawContext: l))
         }
         let rw = reward("Miles", #"eDGE MILES[\s\S]{0,600}?([\d,]{3,})\s+\d{2}-\d{2}-\d{4}"#, text)
         return (cardAccount(.axis, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
@@ -95,13 +97,14 @@ enum CardStatementParser {
         let recs = records(lines, start: { matches(#"^\d{2}/\d{2}/\d{4}\s+\d{6,}\s"#, $0) },
                            stop: { $0.contains("Page ") || $0.lowercased().contains("statement period") })
         var txns: [SyncedTxn] = []
+        var lastDate: Date? = nil
         for g in recs {
             guard let amt = lastMoney(#"([\d,]+\.\d{2})"#, g) else { continue }
             var m = replace(#"^\d{2}/\d{2}/\d{4}\s+\d{6,}\s*"#, in: g, with: "")
             m = replace(#"\s+\d+\s+[\d,]+\.\d{2}(\s+(?:IN|CR))?.*$"#, in: m, with: "")
             let credit = creditByKeyword(g) || g.uppercased().contains(" CR")
-            let date = parseDate(cap(#"^(\d{2}/\d{2}/\d{4})"#, g) ?? "", ["dd/MM/yyyy"]) ?? Date()
-            txns.append(mk("icici", date, tidy(m), amt, credit, mask, "ICICI"))
+            let (date, dateOK) = resolveDate(parseDate(cap(#"^(\d{2}/\d{2}/\d{4})"#, g) ?? "", ["dd/MM/yyyy"]), &lastDate)
+            txns.append(mk("icici", date, tidy(m), amt, credit, mask, "ICICI", dateResolved: dateOK, rawContext: g))
         }
         let rw = reward("Cashback", #"EARNINGS[\s\S]{0,200}?\b(\d{1,7})\s+\1\b"#, text)
         return (cardAccount(.icici, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
@@ -138,13 +141,15 @@ enum CardStatementParser {
         let lines = split.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
 
         var txns: [SyncedTxn] = []
-        var pending: [(date: Date, merchant: String)] = []   // merchants awaiting an amount (FIFO)
+        var pending: [(date: Date, merchant: String, dateOK: Bool)] = []   // merchants awaiting an amount (FIFO)
+        var lastDate: Date? = nil
         var n = 0
         // Scapia prefixes every credit with "+₹" and never a debit → sign comes from the token.
         func pop(_ v: Double, _ credit: Bool) {
             guard !pending.isEmpty else { return }
             let p = pending.removeFirst()
-            txns.append(mk("scapia\(n)", p.date, p.merchant.isEmpty ? "Scapia Federal" : p.merchant, v, credit, mask, "FED")); n += 1
+            txns.append(mk("scapia\(n)", p.date, p.merchant.isEmpty ? "Scapia Federal" : p.merchant, v, credit, mask, "FED",
+                           dateResolved: p.dateOK, rawContext: p.merchant)); n += 1
         }
         func amts(_ s: String) -> [(Double, Bool)] {
             guard let r = amtRe else { return [] }
@@ -155,8 +160,8 @@ enum CardStatementParser {
         }
         for l in lines where !l.isEmpty {
             if let g = match(dateRe, l) {
-                let d = parseDate(g[1], ["dd-MM-yyyy"]) ?? Date()
-                pending.append((d, tidy(replace(#"\+?₹\s*[\d,]+\.\d{2}.*$"#, in: g[2], with: ""))))
+                let (d, dateOK) = resolveDate(parseDate(g[1], ["dd-MM-yyyy"]), &lastDate)
+                pending.append((d, tidy(replace(#"\+?₹\s*[\d,]+\.\d{2}.*$"#, in: g[2], with: "")), dateOK))
                 for a in amts(l) { pop(a.0, a.1) }                 // FIFO: oldest merchant gets the next amount
             } else {
                 let a = amts(l)
@@ -182,12 +187,21 @@ enum CardStatementParser {
         return (kind, v)
     }
     private static func mk(_ tag: String, _ date: Date, _ merchant: String, _ v: Double, _ credit: Bool,
-                           _ mask: String, _ code: String, category: String? = nil) -> SyncedTxn {
+                           _ mask: String, _ code: String, category: String? = nil,
+                           dateResolved: Bool = true, rawContext: String = "") -> SyncedTxn {
         let name = merchant.isEmpty ? "\(code) card" : merchant
         return SyncedTxn(externalId: "cc:\(tag):\(date.timeIntervalSince1970):\(name.prefix(14)):\(v)",
                          narration: name, amount: credit ? v : -v, date: date,
                          accountMask: mask, merchant: name.capitalized,
-                         source: .card, counterparty: name, bankCode: code, category: category)
+                         source: .card, counterparty: name, bankCode: code, category: category,
+                         dateResolved: dateResolved, merchantResolved: !merchant.isEmpty,
+                         rawContext: rawContext.isEmpty ? name : rawContext)
+    }
+    /// Resolve a row date or carry the last good one forward (flagged unresolved), instead of
+    /// silently stamping today — see DataConflict / the statement-date fix.
+    private static func resolveDate(_ parsed: Date?, _ last: inout Date?) -> (date: Date, resolved: Bool) {
+        if let d = parsed { last = d; return (d, true) }
+        return (last ?? Date(), false)
     }
     /// Maps an issuer's merchant-category text to one of our budget categories (best-effort).
     private static func mapCategory(_ s: String) -> String? {

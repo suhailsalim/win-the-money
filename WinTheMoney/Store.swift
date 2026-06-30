@@ -18,6 +18,10 @@ final class Store: ObservableObject {
     @Published var badges: [Badge] = []
     @Published var investments: [Investment] = []
 
+    // statement ingestion ledger + the conflicts queue (rows a parser couldn't fully resolve)
+    @Published var statements: [StatementRecord] = []
+    @Published var conflicts: [DataConflict] = []
+
     // income & tax (manual until an integration is connected)
     @Published var incomeStreams: [IncomeStream] = []
     @Published var deductions: Double = 0
@@ -233,6 +237,7 @@ final class Store: ObservableObject {
             let c = spendContribution(t); if c != 0 { totals[t.category, default: 0] += c }
         }
         for i in categories.indices { categories[i].spent = max(0, totals[categories[i].name] ?? 0) }
+        recomputeGoalProgress()   // bank-balance / txn changes can move asset-backed goal progress
     }
     var planMonths: [PlanMonth] {
         let cal = Calendar.current
@@ -264,7 +269,7 @@ final class Store: ObservableObject {
 
     // MARK: manual ingestion
     func addGoal(_ g: Goal) { goals.insert(g, at: 0); save() }
-    func addDeposit(_ d: Deposit) { deposits.append(d); save() }
+    func addDeposit(_ d: Deposit) { deposits.append(d); recomputeGoalProgress(); save() }
     func addBank(_ b: BankAccount) { banks.append(b); save() }
     func addCard(_ c: CreditCard) { cards.append(c); save() }
     func addCategory(_ c: BudgetCategory) { categories.append(c); save() }
@@ -272,7 +277,7 @@ final class Store: ObservableObject {
     func setTax(total: Double, deductions: Double) {
         taxTotal = total; self.deductions = deductions; save()
     }
-    func addInvestment(_ i: Investment) { investments.append(i); save() }
+    func addInvestment(_ i: Investment) { investments.append(i); recomputeGoalProgress(); save() }
 
     func remove(category: BudgetCategory) {
         guard !category.isSystem else { return }   // base categories are maintained, not deletable
@@ -280,18 +285,35 @@ final class Store: ObservableObject {
     }
     func remove(bank: BankAccount) {
         banks.removeAll { $0.id == bank.id }
-        txns.removeAll { $0.account == bank.name }   // don't leave its transactions orphaned
+        purgeAccountData(name: bank.name, mask: bank.mask)
         recomputeSpent(); save()
     }
     func remove(card: CreditCard) {
         cards.removeAll { $0.id == card.id }
-        txns.removeAll { $0.account == card.name }
+        purgeAccountData(name: card.name, mask: card.mask)
         recomputeSpent(); save()
     }
-    func remove(deposit: Deposit) { deposits.removeAll { $0.id == deposit.id }; save() }
+    /// Removes an account/card's transactions, its statement records, and any conflicts tied to them.
+    private func purgeAccountData(name: String, mask: String) {
+        let stmtIds = Set(statements.filter { $0.accountName == name || $0.accountMask == mask }.map(\.id))
+        statements.removeAll { stmtIds.contains($0.id) }
+        txns.removeAll { $0.account == name || ($0.statementRecordId.map { stmtIds.contains($0) } ?? false) }
+        conflicts.removeAll { c in
+            (c.txnId.map { id in !txns.contains { $0.id == id } } ?? false)   // its txn is gone
+                || (c.statementRecordId.map { stmtIds.contains($0) } ?? false)
+        }
+    }
+    /// Delete a statement record together with every transaction it ingested (and its conflicts).
+    func remove(statement: StatementRecord) {
+        txns.removeAll { $0.statementRecordId == statement.id }
+        conflicts.removeAll { $0.statementRecordId == statement.id }
+        statements.removeAll { $0.id == statement.id }
+        recomputeSpent(); save()   // recomputeSpent also refreshes asset-backed goal progress
+    }
+    func remove(deposit: Deposit) { deposits.removeAll { $0.id == deposit.id }; recomputeGoalProgress(); save() }
     func remove(goal: Goal) { goals.removeAll { $0.id == goal.id }; save() }
     func remove(stream: IncomeStream) { incomeStreams.removeAll { $0.id == stream.id }; save() }
-    func remove(investment: Investment) { investments.removeAll { $0.id == investment.id }; save() }
+    func remove(investment: Investment) { investments.removeAll { $0.id == investment.id }; recomputeGoalProgress(); save() }
 
     // MARK: edit (update in place by id)
     func update(_ b: BankAccount) {
@@ -299,6 +321,7 @@ final class Store: ObservableObject {
         let oldName = banks[i].name
         banks[i] = b
         if oldName != b.name { for j in txns.indices where txns[j].account == oldName { txns[j].account = b.name } }
+        recomputeGoalProgress()
         save()
     }
     func update(_ c: CreditCard) {
@@ -308,10 +331,10 @@ final class Store: ObservableObject {
         if oldName != c.name { renameAccountTxns(from: oldName, to: c.name) }
         save()
     }
-    func update(_ d: Deposit) { if let i = deposits.firstIndex(where: { $0.id == d.id }) { deposits[i] = d; save() } }
+    func update(_ d: Deposit) { if let i = deposits.firstIndex(where: { $0.id == d.id }) { deposits[i] = d; recomputeGoalProgress(); save() } }
     func update(_ g: Goal) { if let i = goals.firstIndex(where: { $0.id == g.id }) { goals[i] = g; save() } }
     func update(_ s: IncomeStream) { if let i = incomeStreams.firstIndex(where: { $0.id == s.id }) { incomeStreams[i] = s; save() } }
-    func update(_ inv: Investment) { if let i = investments.firstIndex(where: { $0.id == inv.id }) { investments[i] = inv; save() } }
+    func update(_ inv: Investment) { if let i = investments.firstIndex(where: { $0.id == inv.id }) { investments[i] = inv; recomputeGoalProgress(); save() } }
     func update(_ c: BudgetCategory) {
         guard let i = categories.firstIndex(where: { $0.id == c.id }) else { return }
         var c = c
@@ -328,6 +351,8 @@ final class Store: ObservableObject {
         if let bi = banks.firstIndex(where: { $0.name == old.account }) { banks[bi].balance -= old.amount }
         txns[i] = t
         if let bi = banks.firstIndex(where: { $0.name == t.account }) { banks[bi].balance += t.amount }
+        // Editing a flagged transaction is how the user fixes it — clear its review flag + conflicts.
+        if old.needsReview { resolveConflicts(forTxn: t.id) }
         recomputeSpent()
         save()
         // If the user recategorised, remember it for this merchant/counterparty.
@@ -337,12 +362,75 @@ final class Store: ObservableObject {
         }
     }
 
+    // MARK: goal ↔ asset allocation
+    /// Live value a single allocation contributes to its goal (asset value × percent, or cash amount).
+    func allocationValue(_ a: GoalAllocation) -> Double {
+        switch a.kind {
+        case .cash: return a.amount
+        case .deposit: return (deposits.first { $0.id == a.assetId }?.current ?? 0) * a.percent / 100
+        case .investment: return (investments.first { $0.id == a.assetId }?.currentValue ?? 0) * a.percent / 100
+        case .bank: return (banks.first { $0.id == a.assetId }?.balance ?? 0) * a.percent / 100
+        }
+    }
+    /// Total live value backing a goal from its linked assets.
+    func allocatedValue(_ g: Goal) -> Double { g.allocations.reduce(0) { $0 + allocationValue($1) } }
+    /// A goal's effective saved amount: derived from assets when any are linked, else the manual figure.
+    func savedFor(_ g: Goal) -> Double { g.allocations.isEmpty ? g.saved : allocatedValue(g) }
+    func progress(_ g: Goal) -> Double { g.target > 0 ? min(1, savedFor(g) / g.target) : 0 }
+    /// Display name for an allocation's underlying asset.
+    func assetName(_ a: GoalAllocation) -> String {
+        switch a.kind {
+        case .cash: return a.note.isEmpty ? "Cash" : a.note
+        case .deposit: return deposits.first { $0.id == a.assetId }.map { "\($0.bank) \($0.tag)" } ?? "Deposit (removed)"
+        case .investment: return investments.first { $0.id == a.assetId }?.name ?? "Investment (removed)"
+        case .bank: return banks.first { $0.id == a.assetId }?.name ?? "Account (removed)"
+        }
+    }
+    /// How much of one asset is already committed across all goals (advisory; >100% is allowed but warned).
+    func allocatedPercent(kind: AllocationKind, assetId: UUID) -> Double {
+        goals.flatMap(\.allocations).filter { $0.kind == kind && $0.assetId == assetId }.reduce(0) { $0 + $1.percent }
+    }
+    /// Recompute the derived `saved`/`status` for every asset-backed goal so existing reads
+    /// (widgets, snapshot, level/XP, GoalsView) stay correct without touching their call sites.
+    func recomputeGoalProgress() {
+        for i in goals.indices where !goals[i].allocations.isEmpty {
+            // cache each allocation's current contribution (for display when an asset later disappears)
+            for j in goals[i].allocations.indices where goals[i].allocations[j].kind != .cash {
+                goals[i].allocations[j].amount = allocationValue(goals[i].allocations[j])
+            }
+            let derived = goals[i].allocations.reduce(0.0) { $0 + allocationValue($1) }
+            goals[i].saved = derived
+            if goals[i].status != .paused {
+                goals[i].status = (derived >= goals[i].target && goals[i].target > 0) ? .achieved
+                    : (goals[i].status == .achieved ? .onTrack : goals[i].status)
+            }
+        }
+    }
+    func addAllocation(_ a: GoalAllocation, to goal: Goal) {
+        guard let i = goals.firstIndex(where: { $0.id == goal.id }) else { return }
+        goals[i].allocations.append(a); recomputeGoalProgress(); save()
+    }
+    func removeAllocation(_ id: UUID, from goal: Goal) {
+        guard let i = goals.firstIndex(where: { $0.id == goal.id }) else { return }
+        goals[i].allocations.removeAll { $0.id == id }; recomputeGoalProgress(); save()
+    }
+    func setAllocations(_ allocs: [GoalAllocation], for goal: Goal) {
+        guard let i = goals.firstIndex(where: { $0.id == goal.id }) else { return }
+        goals[i].allocations = allocs; recomputeGoalProgress(); save()
+    }
+    func updateAllocation(_ a: GoalAllocation, in goal: Goal) {
+        guard let gi = goals.firstIndex(where: { $0.id == goal.id }),
+              let ai = goals[gi].allocations.firstIndex(where: { $0.id == a.id }) else { return }
+        goals[gi].allocations[ai] = a; recomputeGoalProgress(); save()
+    }
+
     // MARK: live quotes (stocks via optional API, mutual funds via AMFI NAV)
     @MainActor
     func refreshQuotes() async {
         let updated = await QuoteProvider.shared.refresh(investments)
         guard !updated.isEmpty else { return }
         for inv in updated { if let i = investments.firstIndex(where: { $0.id == inv.id }) { investments[i] = inv } }
+        recomputeGoalProgress()
         save()
     }
 
@@ -356,7 +444,36 @@ final class Store: ObservableObject {
         save()
     }
     func remove(txn: Txn) {
-        txns.removeAll { $0.id == txn.id }; recomputeSpent(); save()
+        txns.removeAll { $0.id == txn.id }
+        conflicts.removeAll { $0.txnId == txn.id }
+        recomputeSpent(); save()
+    }
+
+    // MARK: conflicts (ingestion needs-review queue)
+    var unresolvedConflicts: [DataConflict] { conflicts.filter { !$0.resolved } }
+    /// Mark every conflict on a transaction resolved and clear its "needs review" marker.
+    func resolveConflicts(forTxn id: UUID) {
+        for j in conflicts.indices where conflicts[j].txnId == id { conflicts[j].resolved = true }
+        if let i = txns.firstIndex(where: { $0.id == id }) {
+            txns[i].needsReview = false
+            txns[i].tags.removeAll { $0 == "Needs review" }
+        }
+        save()
+    }
+    /// Dismiss a single conflict; if it was the txn's last open one, clear the review marker too.
+    func resolve(conflict: DataConflict) {
+        if let i = conflicts.firstIndex(where: { $0.id == conflict.id }) { conflicts[i].resolved = true }
+        if let tid = conflict.txnId, !conflicts.contains(where: { $0.txnId == tid && !$0.resolved }),
+           let ti = txns.firstIndex(where: { $0.id == tid }) {
+            txns[ti].needsReview = false; txns[ti].tags.removeAll { $0 == "Needs review" }
+        }
+        save()
+    }
+    func clearResolvedConflicts() { conflicts.removeAll { $0.resolved }; save() }
+    /// The transaction a conflict refers to (for opening the editor).
+    func txn(for conflict: DataConflict) -> Txn? { conflict.txnId.flatMap { id in txns.first { $0.id == id } } }
+    func statement(for conflict: DataConflict) -> StatementRecord? {
+        conflict.statementRecordId.flatMap { id in statements.first { $0.id == id } }
     }
 
     func logTxn(_ t: Txn) {
@@ -388,7 +505,8 @@ final class Store: ObservableObject {
     /// `adjustBalances` true only for live feeds (Gmail) where each new txn moves the
     /// running balance; statement/CSV/AA imports are historical and must not.
     @discardableResult
-    func mergeSynced(accounts: [SyncedAccount], txns incoming: [SyncedTxn], adjustBalances: Bool = false) -> Int {
+    func mergeSynced(accounts: [SyncedAccount], txns incoming: [SyncedTxn], adjustBalances: Bool = false,
+                     statementRecordId: UUID? = nil) -> Int {
         for a in accounts { upsertAccount(a) }
         let known = Set(self.txns.compactMap(\.externalId))
         var added = 0
@@ -400,9 +518,14 @@ final class Store: ObservableObject {
             let merchant = s.merchant ?? Self.prettyMerchant(s.narration)
             let cl = classify(merchant: merchant, counterparty: s.counterparty, narration: s.narration, income: s.amount > 0)
             let accName = accountName(forMask: s.accountMask, source: s.source)
-            txns.insert(Txn(merchant: merchant, symbol: cl.symbol, category: cl.category, account: accName,
-                            amount: s.amount, date: s.date, externalId: s.externalId,
-                            source: s.source, counterparty: s.counterparty, tags: cl.tags, transfer: cl.transfer), at: 0)
+            var tags = cl.tags
+            if s.hasConflict { tags.append("Needs review") }
+            let t = Txn(merchant: merchant, symbol: cl.symbol, category: cl.category, account: accName,
+                        amount: s.amount, date: s.date, externalId: s.externalId,
+                        source: s.source, counterparty: s.counterparty,
+                        statementRecordId: statementRecordId, needsReview: s.hasConflict, tags: tags, transfer: cl.transfer)
+            txns.insert(t, at: 0)
+            registerConflicts(for: s, txnId: t.id, recordId: statementRecordId)
             if adjustBalances {
                 if s.source == .bank, let bi = banks.firstIndex(where: { $0.mask == s.accountMask }) { banks[bi].balance += s.amount }
                 else if s.source == .card, let ci = cards.firstIndex(where: { $0.mask == s.accountMask }) { cards[ci].outstanding = max(0, cards[ci].outstanding - s.amount) }
@@ -419,7 +542,8 @@ final class Store: ObservableObject {
     /// rewards) and reconcile each statement transaction against existing alert transactions —
     /// enriching a match in place (category/merchant/source) instead of creating a duplicate.
     @discardableResult
-    func mergeStatement(account: SyncedAccount, txns incoming: [SyncedTxn]) -> (added: Int, enriched: Int) {
+    func mergeStatement(account: SyncedAccount, txns incoming: [SyncedTxn],
+                        statementRecordId: UUID? = nil) -> (added: Int, enriched: Int) {
         upsertAccount(account)
         let accName = accountName(forMask: account.mask, source: account.kind)
         let knownExt = Set(self.txns.compactMap(\.externalId))
@@ -433,10 +557,14 @@ final class Store: ObservableObject {
                 let cl = classify(merchant: merchant, counterparty: s.counterparty, narration: s.narration, income: s.amount > 0)
                 let cat = (s.category?.isEmpty == false) ? s.category! : cl.category
                 let sym = categories.first { $0.name == cat }?.symbol ?? cl.symbol
-                txns.insert(Txn(merchant: merchant, symbol: sym, category: cat, account: accName,
-                                amount: s.amount, date: s.date, externalId: s.externalId,
-                                source: s.source, counterparty: s.counterparty, statementId: s.externalId,
-                                tags: cl.tags, transfer: cl.transfer), at: 0)
+                var tags = cl.tags
+                if s.hasConflict { tags.append("Needs review") }
+                let t = Txn(merchant: merchant, symbol: sym, category: cat, account: accName,
+                            amount: s.amount, date: s.date, externalId: s.externalId,
+                            source: s.source, counterparty: s.counterparty, statementId: s.externalId,
+                            statementRecordId: statementRecordId, needsReview: s.hasConflict, tags: tags, transfer: cl.transfer)
+                txns.insert(t, at: 0)
+                registerConflicts(for: s, txnId: t.id, recordId: statementRecordId)
                 added += 1
             }
         }
@@ -511,29 +639,60 @@ final class Store: ObservableObject {
     /// Import a parsed statement (single or combined): cards reconcile via mergeStatement, bank
     /// accounts via mergeSynced (balances + classified txns), plus FD/RD deposits.
     @discardableResult
-    func mergeImport(_ r: ImportResult) -> Int {
+    func mergeImport(_ r: ImportResult, record: StatementRecord? = nil) -> Int {
         var n = 0
+        let rid = record?.id
         let cards = r.accounts.filter { $0.kind == .card }
         let banks = r.accounts.filter { $0.kind == .bank }
         for c in cards {
-            let res = mergeStatement(account: c, txns: r.txns.filter { $0.accountMask == c.mask })
+            let res = mergeStatement(account: c, txns: r.txns.filter { $0.accountMask == c.mask }, statementRecordId: rid)
             n += res.added + res.enriched
         }
         let bankTxns = r.txns.filter { t in !cards.contains { $0.mask == t.accountMask } }
-        if !banks.isEmpty || !bankTxns.isEmpty { n += mergeSynced(accounts: banks, txns: bankTxns) }
-        mergeDeposits(r.deposits)
+        if !banks.isEmpty || !bankTxns.isEmpty { n += mergeSynced(accounts: banks, txns: bankTxns, statementRecordId: rid) }
+        let depAdded = mergeDeposits(r.deposits)
+        // Finalise & record the statement so it shows in the ledger and its txns can be cascade-deleted.
+        if var rec = record {
+            rec.txnCount = txns.filter { $0.statementRecordId == rid }.count
+            rec.depositCount = depAdded
+            if rec.accountName == nil, let a = r.accounts.first {
+                rec.accountName = accountName(forMask: a.mask, source: a.kind); rec.accountMask = a.mask
+            }
+            if rec.periodStart == nil {
+                let dates = r.txns.map(\.date).sorted()
+                rec.periodStart = dates.first; rec.periodEnd = dates.last
+            }
+            statements.insert(rec, at: 0)
+        }
+        save()
         return n
     }
     /// Upsert deposits by their account-number identifier (so monthly re-imports don't duplicate).
-    func mergeDeposits(_ ds: [Deposit]) {
-        guard !ds.isEmpty else { return }
+    /// Returns the number of brand-new deposits added.
+    @discardableResult
+    func mergeDeposits(_ ds: [Deposit]) -> Int {
+        guard !ds.isEmpty else { return 0 }
+        var added = 0
         for d in ds {
             if let id = d.identifier, let i = deposits.firstIndex(where: { $0.identifier == id }) {
                 deposits[i].bank = d.bank; deposits[i].tag = d.tag; deposits[i].rate = d.rate
                 deposits[i].current = d.current; deposits[i].startDate = d.startDate; deposits[i].maturityDate = d.maturityDate
-            } else { deposits.append(d) }
+            } else { deposits.append(d); added += 1 }
         }
+        recomputeGoalProgress()
         save()
+        return added
+    }
+    /// Builds DataConflict entries for any field a parser couldn't resolve on an imported row.
+    private func registerConflicts(for s: SyncedTxn, txnId: UUID, recordId: UUID?) {
+        guard s.hasConflict else { return }
+        let ctx = s.rawContext.isEmpty ? s.narration : s.rawContext
+        func add(_ field: String, _ reason: String) {
+            conflicts.append(DataConflict(txnId: txnId, statementRecordId: recordId, field: field, reason: reason, context: ctx))
+        }
+        if !s.dateResolved { add("date", "Couldn't read the transaction date — a nearby date was used as a placeholder.") }
+        if !s.amountResolved { add("amount", "Couldn't read the amount — set to ₹0 pending review.") }
+        if !s.merchantResolved { add("merchant", "No merchant or description was found for this transaction.") }
     }
 
     /// Set exact balances from authoritative signals (e.g. HDFC "available balance" emails).
@@ -542,6 +701,7 @@ final class Store: ObservableObject {
         for u in updates where u.kind == .bank {
             if let i = banks.firstIndex(where: { $0.mask == u.mask }) { banks[i].balance = u.balance }
         }
+        recomputeGoalProgress()
         save()
     }
 
@@ -761,6 +921,8 @@ final class Store: ObservableObject {
         var badges: [Badge] = []
         var incomeStreams: [IncomeStream] = []
         var investments: [Investment] = []
+        var statements: [StatementRecord] = []
+        var conflicts: [DataConflict] = []
         var nwHistory: [Double] = []
         var fxRates: [String: Double] = ["INR": 1]
         var deductions = 0.0, taxTotal = 0.0
@@ -780,6 +942,8 @@ final class Store: ObservableObject {
             badges     = c.decode(.badges, default: [])
             incomeStreams = c.decode(.incomeStreams, default: [])
             investments = c.decode(.investments, default: [])
+            statements = c.decode(.statements, default: [])
+            conflicts  = c.decode(.conflicts, default: [])
             nwHistory  = c.decode(.nwHistory, default: [])
             fxRates    = c.decode(.fxRates, default: ["INR": 1])
             deductions = c.decode(.deductions, default: 0)
@@ -794,6 +958,7 @@ final class Store: ObservableObject {
         p.categories = categories; p.txns = txns; p.banks = banks; p.cards = cards
         p.deposits = deposits; p.goals = goals; p.milestones = milestones; p.badges = badges
         p.incomeStreams = incomeStreams; p.investments = investments; p.nwHistory = nwHistory
+        p.statements = statements; p.conflicts = conflicts
         p.fxRates = fxRates; p.deductions = deductions; p.taxTotal = taxTotal
         p.advanceTaxPaidStages = Array(advanceTaxPaidStages)
         p.merchantRules = merchantRules
@@ -804,6 +969,7 @@ final class Store: ObservableObject {
         categories = p.categories; txns = p.txns; banks = p.banks; cards = p.cards
         deposits = p.deposits; goals = p.goals; milestones = p.milestones; badges = p.badges
         incomeStreams = p.incomeStreams; investments = p.investments; nwHistory = p.nwHistory
+        statements = p.statements; conflicts = p.conflicts
         fxRates = p.fxRates.isEmpty ? ["INR": 1] : p.fxRates
         deductions = p.deductions; taxTotal = p.taxTotal
         advanceTaxPaidStages = Set(p.advanceTaxPaidStages)
@@ -883,6 +1049,7 @@ final class Store: ObservableObject {
     func clearAll() {
         categories = []; txns = []; banks = []; cards = []; deposits = []; goals = []
         investments = []; incomeStreams = []; nwHistory = []
+        statements = []; conflicts = []
         deductions = 0; taxTotal = 0; advanceTaxPaidStages = []; merchantRules = [:]
         fxRates = ["INR": 1]
         milestones = Self.defaultMilestones()

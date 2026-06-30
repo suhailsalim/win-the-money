@@ -48,6 +48,8 @@ struct Txn: Identifiable, Codable, Hashable {
     var source: TxnSource = .unknown
     var counterparty: String? = nil // VPA / payee / account — key for recurring + rules
     var statementId: String? = nil  // set once confirmed/enriched by a statement (prevents re-match)
+    var statementRecordId: UUID? = nil // the StatementRecord this txn was ingested from (cascade delete)
+    var needsReview: Bool = false   // a parser couldn't resolve date/amount/merchant — see DataConflict
     var tags: [String] = []         // facet labels (Entertainment, Tech, …) + "Refund"
     var transfer: Bool = false      // CC bill payment / self-transfer — excluded from spend & income
     var income: Bool { amount > 0 }
@@ -189,9 +191,41 @@ struct Goal: Identifiable, Codable, Hashable {
     var monthly: Double
     var deadline: Date
     var status: GoalStatus
+    var allocations: [GoalAllocation] = []   // backing assets (FD/RD, investments, bank slice, cash)
     var pct: Double { target > 0 ? min(1, saved / target) : 0 }
     var active: Bool { status == .onTrack || status == .atRisk }
     var deadlineText: String { deadline.formatted(.dateTime.month(.abbreviated).year()) }
+    /// True when progress is driven by linked assets (so `saved` is derived, not manually edited).
+    var assetBacked: Bool { !allocations.isEmpty }
+}
+
+// MARK: - Goal asset allocation
+/// What kind of asset a `GoalAllocation` points at.
+enum AllocationKind: String, Codable, CaseIterable {
+    case deposit, investment, bank, cash
+    var label: String {
+        switch self {
+        case .deposit: return "Deposit"; case .investment: return "Investment"
+        case .bank: return "Bank balance"; case .cash: return "Cash"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .deposit: return "lock.fill"; case .investment: return "chart.line.uptrend.xyaxis"
+        case .bank: return "building.columns.fill"; case .cash: return "banknote.fill"
+        }
+    }
+}
+
+/// Links a portion (`percent`) of one asset to a goal. For `.cash` the contribution is the
+/// manual `amount`; for the others it's the asset's live value × percent.
+struct GoalAllocation: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var kind: AllocationKind
+    var assetId: UUID? = nil      // Deposit/Investment/BankAccount id; nil for cash
+    var percent: Double = 100     // 0…100 — share of the asset allocated to this goal
+    var amount: Double = 0        // cash: the manual amount; others: cached last-computed contribution
+    var note: String = ""         // free-form label (mainly for cash)
 }
 
 // MARK: - Milestone
@@ -211,6 +245,43 @@ struct Badge: Identifiable, Codable, Hashable {
     var symbol: String
     var label: String
     var earned: Bool
+}
+
+// MARK: - Statement ledger
+/// A record of one parsed statement (manual file, spreadsheet, or Gmail attachment). Lets the
+/// user see what's been ingested and delete a statement together with all of its transactions.
+struct StatementRecord: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var fileName: String
+    var source: String                 // "Imported file" / "Spreadsheet" / "Gmail"
+    var importedAt: Date = Date()
+    var periodStart: Date? = nil
+    var periodEnd: Date? = nil
+    var accountName: String? = nil
+    var accountMask: String? = nil
+    var txnCount: Int = 0
+    var depositCount: Int = 0
+    var gmailKey: String? = nil        // links to GmailManager's processed-statement ledger
+
+    var periodText: String? {
+        guard let s = periodStart, let e = periodEnd else { return nil }
+        let f = Date.FormatStyle.dateTime.day().month(.abbreviated).year()
+        return "\(s.formatted(f)) – \(e.formatted(f))"
+    }
+}
+
+// MARK: - Data conflict (ingestion needs-review queue)
+/// A field a parser couldn't resolve for an imported transaction (missing/garbled date, amount,
+/// or merchant). Surfaced in Settings → Conflicts, linked back to the statement + narration.
+struct DataConflict: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var txnId: UUID? = nil
+    var statementRecordId: UUID? = nil
+    var field: String                  // "date" / "amount" / "merchant"
+    var reason: String
+    var context: String = ""           // statement file + narration snippet, for understanding
+    var createdAt: Date = Date()
+    var resolved: Bool = false
 }
 
 // MARK: - Currencies (for multi-currency income)

@@ -4,6 +4,7 @@ struct GoalsView: View {
     @EnvironmentObject var store: Store
     @State private var showAdd = false
     @State private var editingGoal: Goal?
+    @State private var allocatingGoal: Goal?
 
     private var active: [Goal] { store.goals.filter(\.active) }
     private var paused: [Goal] { store.goals.filter { $0.status == .paused } }
@@ -47,6 +48,9 @@ struct GoalsView: View {
         }
         .sheet(isPresented: $showAdd) { AddGoalSheet() }
         .sheet(item: $editingGoal) { AddGoalSheet(editing: $0) }
+        .sheet(item: $allocatingGoal) { g in
+            AssetAllocationPicker(existing: g.allocations) { store.addAllocation($0, to: g) }
+        }
     }
 
     private var levelCard: some View {
@@ -121,10 +125,27 @@ struct GoalsView: View {
             }
             .padding(.top, 13).padding(.bottom, 6)
             ZenBar(value: g.pct, tint: AnyShapeStyle(Zen.calmGradient))
+            if !g.allocations.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(g.allocations) { a in
+                            HStack(spacing: 4) {
+                                Image(systemName: a.kind.symbol).font(.system(size: 9))
+                                Text(store.assetName(a)).lineLimit(1)
+                                if a.kind != .cash, a.percent < 100 { Text("\(Int(a.percent))%").foregroundStyle(Zen.ink3) }
+                            }
+                            .font(.caption2.weight(.medium)).foregroundStyle(Zen.ink2)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(Zen.track.opacity(0.5), in: Capsule())
+                        }
+                    }
+                }.padding(.top, 9)
+            }
         }
         .padding(16).zenCard(22)
         .contextMenu {
             Button { editingGoal = g } label: { Label("Edit", systemImage: "pencil") }
+            Button { allocatingGoal = g } label: { Label("Allocate asset", systemImage: "link.badge.plus") }
             Button(role: .destructive) { store.remove(goal: g) } label: { Label("Delete", systemImage: "trash") }
         }
     }
