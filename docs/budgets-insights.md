@@ -21,3 +21,12 @@ allocation visuals. Editing a category's plan updates `BudgetCategory.plan`.
 Analytics over transactions: spending by category and by **tag** (facet tags from the brand library, e.g.
 Streaming, Quick commerce), trends over time, and top merchants. All derived live from `Store.txns` —
 no extra persistence. Transfers and income are excluded from spend.
+
+## AI insights (`AI.swift`, `AIInsights.swift`, `AIView.swift`)
+
+Opt-in, **off by default**. `AIManager` (multi-provider) runs a unified `complete(system:user:)` across
+Apple Intelligence (on-device, `FoundationModels`), Anthropic, OpenAI, Gemini, OpenRouter, Ollama
+(cloud/local) and Azure OpenAI. Keys live in the Keychain (`ai_key_<provider>`); model/config in
+UserDefaults. `AIInsights.summary(store)` builds an **aggregate-only** snapshot (totals, category sums,
+tags, recurring, goals — never raw transactions or account numbers); `AIInsightsCard` (Insights tab)
+runs tasks (analyse spending, review budget, suggest a goal, find savings). Settings → AI configures it.
