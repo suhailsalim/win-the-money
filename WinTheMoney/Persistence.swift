@@ -26,7 +26,7 @@ extension KeyedDecodingContainer {
 
 // MARK: BudgetCategory
 extension BudgetCategory {
-    enum CodingKeys: String, CodingKey { case id, name, symbol, spent, plan, color, isSystem }
+    enum CodingKeys: String, CodingKey { case id, name, symbol, spent, plan, color, isSystem, period, customMonths, anchor }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.decode(.id, default: UUID())
@@ -36,6 +36,9 @@ extension BudgetCategory {
         plan = c.decode(.plan, default: 0)
         color = c.decode(.color, default: "6E9BD8")
         isSystem = c.decode(.isSystem, default: false)
+        period = BudgetPeriod(rawValue: c.decode(.period, default: "monthly")) ?? .monthly
+        customMonths = c.decode(.customMonths, default: 1)
+        anchor = c.decode(.anchor, default: nil)
     }
 }
 

@@ -1229,10 +1229,17 @@ struct AddCategorySheet: View {
     @State private var name = ""
     @State private var plan: Double = 0
     @State private var symbol = "cart.fill"
+    @State private var period: BudgetPeriod = .monthly
+    @State private var customMonths = 6
+    @State private var hasAnchor = false
+    @State private var anchor = Store.financialYearStart()
     @State private var loaded = false
-    private let symbols = ["house.fill","cart.fill","fork.knife","car.fill","bag.fill","heart.fill","play.rectangle.fill","graduationcap.fill","airplane","gift.fill","pawprint.fill","gamecontroller.fill"]
+    private let symbols = ["house.fill","cart.fill","fork.knife","car.fill","bag.fill","heart.fill","play.rectangle.fill","graduationcap.fill","airplane","gift.fill","pawprint.fill","gamecontroller.fill","shield.lefthalf.filled"]
     private let colors = ["6E9BD8","7FC4A3","5BA585","4F7FC4","9AA7BE"]
     private var isSystem: Bool { editing?.isSystem ?? false }
+    private var budgetLabel: String { period == .monthly ? "Monthly budget" : "Budget / \(period == .custom ? "\(max(1,customMonths)) months" : period.noun)" }
+    private var perMonth: Double { plan / Double(period == .custom ? max(1, customMonths) : period.months) }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -1243,10 +1250,30 @@ struct AddCategorySheet: View {
                     } else {
                         LabeledField(label: "Category name", placeholder: "e.g. Groceries", text: $name)
                     }
-                    LabeledAmountField(label: "Monthly budget", amount: $plan)
+                    LabeledAmountField(label: budgetLabel, amount: $plan)
                 } footer: {
                     if isSystem { Text("This is a built-in category — its name can't be changed, but you can set its budget and icon.") }
                 }
+
+                Section {
+                    Picker("Cap period", selection: $period) {
+                        ForEach(BudgetPeriod.allCases) { Text($0.label).tag($0) }
+                    }
+                    if period == .custom {
+                        Stepper("Every \(customMonths) month\(customMonths == 1 ? "" : "s")", value: $customMonths, in: 1...36)
+                    }
+                    if period == .annual || period == .custom {
+                        Toggle("Set a cycle start date", isOn: $hasAnchor)
+                        if hasAnchor {
+                            DatePicker("Cycle starts", selection: $anchor, displayedComponents: .date)
+                        }
+                    }
+                } header: { Text("Cap window") } footer: {
+                    Text(period == .monthly
+                         ? "Spending resets at the start of each month."
+                         : "Tracks spend across the whole \(period == .custom ? "\(max(1,customMonths))-month" : period.noun) window — useful for insurance, fees or yearly subscriptions. ≈ \(INR.compact(perMonth))/month against your overall plan." + (hasAnchor ? "" : " Cycle aligns to the financial year (Apr–Mar) unless you set a start date."))
+                }
+
                 if let e = editing, !isSystem { DeleteSheetButton(noun: "category") { store.remove(category: e); dismiss() } }
             }
             .zenForm().navigationTitle(editing == nil ? "Add category" : "Edit category").navigationBarTitleDisplayMode(.inline)
@@ -1257,7 +1284,9 @@ struct AddCategorySheet: View {
                         let c = BudgetCategory(id: editing?.id ?? UUID(), name: name.isEmpty ? "Category" : name,
                                                symbol: symbol, spent: editing?.spent ?? 0, plan: plan,
                                                color: editing?.color ?? (colors.randomElement() ?? "6E9BD8"),
-                                               isSystem: editing?.isSystem ?? false)
+                                               isSystem: editing?.isSystem ?? false,
+                                               period: period, customMonths: max(1, customMonths),
+                                               anchor: (period == .annual || period == .custom) && hasAnchor ? anchor : nil)
                         if editing == nil { store.addCategory(c) } else { store.update(c) }
                         dismiss()
                     }.fontWeight(.semibold)
@@ -1266,6 +1295,8 @@ struct AddCategorySheet: View {
             .onAppear {
                 guard !loaded, let e = editing else { loaded = true; return }; loaded = true
                 name = e.name; plan = e.plan; symbol = e.symbol
+                period = e.period; customMonths = e.customMonths
+                if let a = e.anchor { anchor = a; hasAnchor = true }
             }
         }
     }
