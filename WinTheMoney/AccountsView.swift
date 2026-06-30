@@ -14,9 +14,19 @@ struct AccountsView: View {
     @State private var editingCard: CreditCard?
     @State private var editingDeposit: Deposit?
     @State private var editingInvestment: Investment?
+    @State private var allocateTarget: AllocTarget?
     @State private var refreshing = false
 
     private var aaEnabled: Bool { store.accountAggregatorEnabled }
+
+    /// One asset to quick-allocate to a goal.
+    struct AllocTarget: Identifiable {
+        let id = UUID()
+        let kind: AllocationKind
+        let assetId: UUID
+        let name: String
+        let value: Double
+    }
 
     var body: some View {
         if embedded { content } else { NavigationStack { content } }
@@ -68,6 +78,9 @@ struct AccountsView: View {
             .sheet(item: $editingCard) { AddCardSheet(editing: $0) }
             .sheet(item: $editingDeposit) { AddDepositSheet(editing: $0) }
             .sheet(item: $editingInvestment) { AddInvestmentSheet(editing: $0) }
+            .sheet(item: $allocateTarget) { t in
+                QuickAllocateSheet(kind: t.kind, assetId: t.assetId, assetName: t.name, assetValue: t.value)
+            }
     }
 
     private func refresh() { refreshing = true; Task { await store.refreshQuotes(); refreshing = false } }
@@ -84,6 +97,7 @@ struct AccountsView: View {
                     Button { editingBank = b } label: { bankRow(b) }.buttonStyle(.plain)
                         .contextMenu {
                             Button { editingBank = b } label: { Label("Edit", systemImage: "pencil") }
+                            Button { allocateTarget = .init(kind: .bank, assetId: b.id, name: b.name, value: b.balance) } label: { Label("Allocate to goal", systemImage: "link.badge.plus") }
                             Button(role: .destructive) { store.remove(bank: b) } label: { Label("Delete", systemImage: "trash") }
                         }
                 }
@@ -130,6 +144,7 @@ struct AccountsView: View {
                         Button { editingInvestment = i } label: { investmentRow(i) }.buttonStyle(.plain)
                             .contextMenu {
                                 Button { editingInvestment = i } label: { Label("Edit", systemImage: "pencil") }
+                                Button { allocateTarget = .init(kind: .investment, assetId: i.id, name: i.name, value: i.currentValue) } label: { Label("Allocate to goal", systemImage: "link.badge.plus") }
                                 Button(role: .destructive) { store.remove(investment: i) } label: { Label("Delete", systemImage: "trash") }
                             }
                     }
@@ -156,6 +171,7 @@ struct AccountsView: View {
                         Button { editingDeposit = d } label: { depositRow(d) }.buttonStyle(.plain)
                             .contextMenu {
                                 Button { editingDeposit = d } label: { Label("Edit", systemImage: "pencil") }
+                                Button { allocateTarget = .init(kind: .deposit, assetId: d.id, name: "\(d.bank) \(d.tag)", value: d.current) } label: { Label("Allocate to goal", systemImage: "link.badge.plus") }
                                 Button(role: .destructive) { store.remove(deposit: d) } label: { Label("Delete", systemImage: "trash") }
                             }
                     }

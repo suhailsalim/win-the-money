@@ -31,6 +31,13 @@ struct SyncedTxn: Hashable {
     var counterparty: String? = nil
     var bankCode: String? = nil
     var category: String? = nil   // statement-provided category (e.g. Axis merchant category)
+    // Parser confidence flags (transient — not persisted). When a field couldn't be resolved the
+    // row still imports with a best-guess value, but is flagged for review (see DataConflict).
+    var dateResolved: Bool = true
+    var amountResolved: Bool = true
+    var merchantResolved: Bool = true
+    var rawContext: String = ""   // narration/source snippet shown on the conflict card
+    var hasConflict: Bool { !(dateResolved && amountResolved && merchantResolved) }
 }
 
 /// An exact balance reading (e.g. from an HDFC "available balance" email).

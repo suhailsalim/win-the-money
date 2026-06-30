@@ -33,7 +33,7 @@ enum EmailTransactionParser {
             let credit = text.lowercased().contains("reversal") || text.lowercased().contains("refund")
             return make(src, mask: g[3], amount: g[1], credit: credit, source: .card, bankCode: "AXIS",
                         counterparty: clean(g[2]), merchant: clean(g[2]), narration: "Axis Credit Card · \(g[2])",
-                        date: date(cap(#"Date[:\s]+(\d{2}[-/]\d{2}[-/]\d{2,4})"#, text, 1)?[1] ?? "") ?? headerDate)
+                        date: date(cap(#"Date(?:\s*&\s*Time)?\s*:?\s*(\d{2}[-/]\d{2}[-/]\d{2,4})"#, text, 1)?[1] ?? "") ?? headerDate)
         }
 
         // 4a) Scapia Federal — payment processed (spend)
@@ -44,13 +44,21 @@ enum EmailTransactionParser {
                         counterparty: merchant, merchant: merchant, narration: "Scapia Federal CC · \(merchant)", date: d)
         }
 
-        // 4b) Scapia Federal — waiver / credit-debit notice
-        if let g = cap(#"(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+has been\s+(credited|debited)\s+to your Scapia Federal Credit Card ending in\s+(\d+)\s+on\s+(\d{2}-\d{2}-\d{4})"#, text, 4) {
+        // 4b) Scapia Federal — waiver / credit-debit notice (e.g. fuel surcharge waiver credited)
+        if let g = cap(#"(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+has been\s+(credited|debited)\s+to your Scapia Federal[^.]*?Credit Card ending in\s+(\d+)\s+on\s+(\d{2}-\d{2}-\d{4})"#, text, 4) {
             let credit = g[2].lowercased() == "credited"
             let what = text.lowercased().contains("fuel surcharge") ? "Fuel surcharge waiver" : "Scapia Federal CC"
             return make(src, mask: g[3], amount: g[1], credit: credit, source: .card, bankCode: "FED",
                         counterparty: what, merchant: what, narration: "Scapia Federal Credit Card",
                         date: date(g[4]) ?? headerDate)
+        }
+
+        // 4c) Scapia Federal — refund received (credit; amount + merchant in the detail box, no in-body date)
+        if let g = cap(#"received a refund on your Scapia Federal[^.]*?Credit Card ending in\s+(\d+)[\s\S]*?Amount\s*(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s*Merchant\s+([^\n]{2,40})"#, text, 3) {
+            let merchant = boundMerchant(g[3])
+            return make(src, mask: g[1], amount: g[2], credit: true, source: .card, bankCode: "FED",
+                        counterparty: merchant, merchant: merchant,
+                        narration: "Scapia Federal CC refund · \(merchant)", date: headerDate)
         }
 
         return nil
@@ -79,10 +87,44 @@ enum EmailTransactionParser {
         var t = s.replacingOccurrences(of: #"(?is)<(script|style|head)[^>]*>.*?</\1>"#, with: " ", options: .regularExpression)
         t = t.replacingOccurrences(of: #"(?i)<br\s*/?>"#, with: " ", options: .regularExpression)
         t = t.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
-        for (e, r) in ["&amp;": "&", "&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&rsquo;": "'"] {
+        for (e, r) in ["&amp;": "&", "&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&rsquo;": "'", "&apos;": "'"] {
             t = t.replacingOccurrences(of: e, with: r)
         }
+        // Decode numeric character references (&#8202; thin/hair spaces, &#160; nbsp, &#x20B9; ₹, …);
+        // bank HTML alerts use these as table spacers between a label and its value.
+        t = decodeNumericEntities(t)
+        // Normalise every kind of space (NBSP, thin/hair/zero-width spaces, the U+FFFD replacement char
+        // a bad byte decodes to) to a plain space, so "INR<nbsp>924" / "Amount<hairspace>₹265" still match.
+        t = String(t.unicodeScalars.map { sc -> Character in
+            if sc == "\u{FFFD}" || sc.properties.isWhitespace || sc.properties.generalCategory == .format { return " " }
+            return Character(sc)
+        })
         return t.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Decodes `&#NNN;` and `&#xHH;` character references (bounded so stray "&#" text is left alone).
+    private static func decodeNumericEntities(_ s: String) -> String {
+        guard s.contains("&#") else { return s }
+        var out = String.UnicodeScalarView()
+        let scalars = Array(s.unicodeScalars)
+        var i = 0
+        while i < scalars.count {
+            if scalars[i] == "&", i + 1 < scalars.count, scalars[i + 1] == "#" {
+                var j = i + 2
+                var hex = false
+                if j < scalars.count, scalars[j] == "x" || scalars[j] == "X" { hex = true; j += 1 }
+                var digits = ""
+                while j < scalars.count, digits.count < 6, scalars[j] != ";" {
+                    digits.unicodeScalars.append(scalars[j]); j += 1
+                }
+                if j < scalars.count, scalars[j] == ";", !digits.isEmpty,
+                   let v = UInt32(digits, radix: hex ? 16 : 10), let sc = Unicode.Scalar(v) {
+                    out.append(sc); i = j + 1; continue
+                }
+            }
+            out.append(scalars[i]); i += 1
+        }
+        return String(out)
     }
     private static func money(_ s: String) -> Double? { Double(s.replacingOccurrences(of: ",", with: "")) }
     private static func clean(_ s: String) -> String {

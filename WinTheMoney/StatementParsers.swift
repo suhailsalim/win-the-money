@@ -244,15 +244,18 @@ enum StatementParser {
         var out: [SyncedTxn] = []
         var prev = opening ?? rows[0].balance
         var have = opening != nil
+        var lastDate: Date? = nil
         for row in rows {
             let amount = have ? row.balance - prev : 0
             prev = row.balance; have = true
             if abs(amount) < 0.005 { continue }
             let narration = row.narration.trimmingCharacters(in: .whitespaces)
+            let (date, dateOK) = bestDate(row.date, carrying: &lastDate)
             out.append(SyncedTxn(externalId: "hdfc:\(row.balance):\(amount)",
                                  narration: narration.isEmpty ? "HDFC transaction" : narration,
-                                 amount: amount, date: row.date ?? Date(), accountMask: mask,
-                                 merchant: hdfcNarrationMerchant(narration, credit: amount > 0)))
+                                 amount: amount, date: date, accountMask: mask,
+                                 merchant: hdfcNarrationMerchant(narration, credit: amount > 0),
+                                 dateResolved: dateOK, merchantResolved: !narration.isEmpty, rawContext: narration))
         }
         return out
     }
@@ -326,6 +329,7 @@ enum StatementParser {
 
         var out: [SyncedTxn] = []
         var qi = 0
+        var lastDate: Date? = nil
         for a in amounts {
             let dateStr: String, particulars: String
             if let d = a.date { dateStr = d; particulars = a.particulars ?? "" }
@@ -336,11 +340,13 @@ enum StatementParser {
             let narration = particulars.replacingOccurrences(of: "\n", with: " ")
                 .trimmingCharacters(in: .whitespaces)
             let m = federalMerchant(narration)
+            let (date, dateOK) = bestDate(parseDate(dateStr, ["dd-MMM-yyyy"]), carrying: &lastDate)
             out.append(SyncedTxn(externalId: "fed:\(dateStr):\(a.tranId):\(a.balance)",
                                  narration: narration, amount: signed,
-                                 date: parseDate(dateStr, ["dd-MMM-yyyy"]) ?? Date(),
+                                 date: date,
                                  accountMask: mask, merchant: m,
-                                 source: .bank, counterparty: m, bankCode: "FED"))
+                                 source: .bank, counterparty: m, bankCode: "FED",
+                                 dateResolved: dateOK, rawContext: narration))
         }
         return out.isEmpty ? parseFederalChain(text, mask: mask) : out
     }
@@ -362,16 +368,18 @@ enum StatementParser {
         var vpas = scan(#"([A-Za-z0-9._-]+@[A-Za-z]+)"#, region).map { $0[1] }
         let hasCharge = region.range(of: #"CHRG|ALERT|\bSMS\b"#, options: .regularExpression) != nil
         var out: [SyncedTxn] = []
+        var lastDate: Date? = nil
         for (i, g) in rows.enumerated() {
             let amt = money(g[3]) ?? 0, bal = money(g[4]) ?? 0
             let signed = bal + 0.001 >= prev ? amt : -amt
             prev = bal
-            let date = parseDate(i < posting.count ? posting[i] : (posting.last ?? ""), ["dd/MM/yyyy"]) ?? Date()
+            let (date, dateOK) = bestDate(parseDate(i < posting.count ? posting[i] : (posting.last ?? ""), ["dd/MM/yyyy"]), carrying: &lastDate)
             let m: String = !vpas.isEmpty ? vpas.removeFirst()
                 : (signed < 0 && hasCharge ? "Bank charge" : "Federal \(signed > 0 ? "credit" : "debit")")
             out.append(SyncedTxn(externalId: "fed:\(g[2]):\(bal)", narration: m, amount: signed,
                                  date: date, accountMask: mask, merchant: m,
-                                 source: .bank, counterparty: m, bankCode: "FED"))
+                                 source: .bank, counterparty: m, bankCode: "FED",
+                                 dateResolved: dateOK, rawContext: m))
         }
         return out
     }
@@ -446,7 +454,8 @@ enum StatementParser {
             guard !seen.contains(ext) else { continue }; seen.insert(ext)
             out.append(SyncedTxn(externalId: ext, narration: merchant, amount: amount,
                                  date: currentDate ?? Date(), accountMask: mask, merchant: merchant,
-                                 source: .bank, counterparty: merchant, bankCode: "HDFC"))
+                                 source: .bank, counterparty: merchant, bankCode: "HDFC",
+                                 dateResolved: currentDate != nil, rawContext: l))
         }
         return out
     }
@@ -517,6 +526,13 @@ enum StatementParser {
         return out
     }
     private static func money(_ s: String) -> Double? { Double(s.replacingOccurrences(of: ",", with: "")) }
+    /// Resolve a row date: use `candidate` if present (and remember it), else carry the last good
+    /// date forward as a best-guess placeholder. Returns `resolved == false` whenever the row had no
+    /// date of its own, so the caller can flag it for review instead of silently stamping today.
+    static func bestDate(_ candidate: Date?, carrying last: inout Date?) -> (date: Date, resolved: Bool) {
+        if let d = candidate { last = d; return (d, true) }
+        return (last ?? Date(), false)
+    }
     private static func parseDate(_ s: String, _ formats: [String]) -> Date? {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
         let cleaned = s.replacingOccurrences(of: "  ", with: " ")
