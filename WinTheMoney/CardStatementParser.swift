@@ -112,7 +112,7 @@ enum CardStatementParser {
         l.contains("Domestic Transaction") || l.contains("Reward Points") || l.isEmpty
     }
 
-    // MARK: - Axis (Atlas etc.) — single-line rows ending in amount + Dr/Cr
+    // MARK: - Axis (Atlas etc.) — single-line rows: date | details | MERCHANT CATEGORY | amount Dr/Cr
     private static func parseAxis(_ text: String) -> (SyncedAccount, [SyncedTxn]) {
         let mask = cap(#"(?:Credit Card Number|Card No:?)\s*\d{6}\*+(\d{4})"#, text) ?? cap(#"\*{2,}(\d{4})"#, text) ?? ""
         let limit = cap(#"Credit Limit\s+([\d,]+\.\d{2})\s+Available"#, text).flatMap(money)
@@ -125,10 +125,62 @@ enum CardStatementParser {
             guard let g = match(rowRe, l), let v = money(g[3]) else { continue }
             let credit = g[4] == "Cr"
             let (date, dateOK) = resolveDate(parseDate(g[1], ["dd/MM/yyyy"]), &lastDate)
-            txns.append(mk("axis", date, tidy(g[2]), v, credit, mask, "AXIS", category: mapCategory(g[2]), dateResolved: dateOK, rawContext: l))
+            // The details cell carries an inline forex leg "( EUR 109.93 )" for international spends,
+            // and the statement's own MCC "MERCHANT CATEGORY" column trails the merchant before the
+            // amount. Peel both off so the merchant name is clean and the row is properly classified.
+            var detail = g[2]
+            let fx = axisForex(detail)
+            if let fx { detail = fx.stripped }
+            let (merchant, lexCat) = splitAxisCategory(detail)
+            var category = lexCat ?? mapCategory(merchant)
+            if matches(#"^EMI (INTEREST|PRINCIPAL)\b"#, merchant.uppercased()) { category = "EMI & Loans" }
+            txns.append(mk("axis", date, tidy(merchant), v, credit, mask, "AXIS", category: category,
+                           dateResolved: dateOK, rawContext: l,
+                           forexCurrency: fx?.currency, forexAmount: fx?.amount, isInternational: fx != nil))
         }
         let rw = reward("Miles", #"eDGE MILES[\s\S]{0,600}?([\d,]{3,})\s+\d{2}-\d{2}-\d{4}"#, text)
         return (cardAccount(.axis, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
+    }
+
+    /// Axis prints an MCC "MERCHANT CATEGORY" column as the trailing word(s) of each spend row (before
+    /// the amount). It's a fixed vocabulary — strip the matched token off the merchant name and map the
+    /// informative ones to a budget category. Catch-all buckets (MISCELLANEOUS / MISC STORE / SERVICES)
+    /// are stripped for a clean name but left uncategorised so the brand classifier can decide. Charge
+    /// rows (GST, fees, EMI legs) carry no category column, so nothing is stripped.
+    private static let axisCategories: [(token: String, budget: String?)] = [
+        ("RESTAURANTS", "Eating out"), ("FAST FOOD", "Eating out"), ("CATERERS", "Eating out"),
+        ("BAKERIES", "Eating out"), ("BARS", "Eating out"),
+        ("HOTELS", "Travel"), ("LODGING", "Travel"), ("AIRLINES", "Travel"),
+        ("TRAVEL AGENCIES", "Travel"), ("RAILWAYS", "Travel"), ("TRAVEL", "Travel"),
+        ("GROCERY STORES", "Groceries"), ("SUPERMARKETS", "Groceries"), ("FOOD PRODUCTS", "Groceries"),
+        ("DEPARTMENT STORES", "Groceries"), ("DEPT STORES", "Groceries"),
+        ("CLOTH STORES", "Shopping"), ("SHOE STORES", "Shopping"), ("BOOK STORES", "Shopping"),
+        ("ELECTRONICS", "Shopping"), ("FURNITURE", "Shopping"), ("JEWELRY", "Shopping"),
+        ("CAR RENTALS", "Transport"), ("AUTO SERVICES", "Transport"), ("TAXICABS", "Transport"),
+        ("PARKING", "Transport"), ("TOLL", "Transport"),
+        ("SERVICE STATIONS", "Fuel"), ("PETROL", "Fuel"), ("FUEL", "Fuel"),
+        ("DRUG STORES", "Health"), ("HOSPITALS", "Health"), ("PHARMACIES", "Health"), ("MEDICAL", "Health"),
+        ("UTILITIES", "Bills & Utilities"), ("TELECOM", "Bills & Utilities"),
+        ("INSURANCE", "Insurance"), ("SCHOOLS", "Education"), ("EDUCATION", "Education"),
+        ("MISCELLANEOUS", nil), ("MISC STORE", nil), ("SERVICES", nil),
+    ].sorted { $0.token.count > $1.token.count }   // longest token wins (e.g. "DEPT STORES" before "STORES")
+
+    private static func splitAxisCategory(_ detail: String) -> (merchant: String, budget: String?) {
+        let upper = detail.uppercased()
+        for (tok, budget) in axisCategories where upper.hasSuffix(tok) {
+            let idx = detail.index(detail.endIndex, offsetBy: -tok.count)
+            // require a word boundary before the token so we don't slice into a real merchant word
+            guard idx == detail.startIndex || detail[detail.index(before: idx)] == " " else { continue }
+            return (String(detail[..<idx]).trimmingCharacters(in: .whitespaces), budget)
+        }
+        return (detail, nil)
+    }
+
+    /// An Axis international row's original currency + amount, from the inline "( EUR 109.93 )" leg.
+    private static func axisForex(_ detail: String) -> (currency: String, amount: Double, stripped: String)? {
+        guard let g = cap2(#"\(\s*([A-Z]{3})\s+([\d,]+(?:\.\d{1,2})?)\s*\)"#, detail), let a = money(g.1) else { return nil }
+        let stripped = tidy(replace(#"\(\s*[A-Z]{3}\s+[\d,]+(?:\.\d{1,2})?\s*\)"#, in: detail, with: " "))
+        return (g.0, a, stripped)
     }
 
     // MARK: - ICICI (Amazon Pay etc.) — "`" rupee glyph; date+serno line then points+amount line
@@ -284,7 +336,7 @@ enum CardStatementParser {
         if has(["HOTEL", "RESTAURANT", "CAFE", "FOOD", "DINING", "BAKER", "BREW"]) { return "Eating out" }
         if has(["GROCER", "SUPERMARKET", "DEPT STORE", "DEPARTMENT"]) { return "Groceries" }
         if has(["CAR RENTAL", "UBER", "TRAVEL", "FUEL", "PETROL", "AIRLINE", "AUTO SERVICE", "TRANSPORT", "RAIL"]) { return "Transport" }
-        if has(["MEDICAL", "PHARMAC", "HOSPITAL", "HEALTH", "CLINIC"]) { return "Health" }
+        if has(["MEDICAL", "PHARMAC", "HOSPITAL", "HEALTH", "CLINIC", "FITNESS", "GYM", "WELLNESS"]) { return "Health" }
         if has(["CLOTH", "APPAREL", "RETAIL", "STORE", "SHOP", "FASHION", "ELECTRONIC"]) { return "Shopping" }
         if has(["SUBSCRIPTION", "STREAM", "NETFLIX", "ENTERTAIN"]) { return "Subscriptions" }
         return nil
