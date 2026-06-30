@@ -62,7 +62,8 @@ enum StatementImporter {
                 return ImportResult(accounts: [card.account], txns: card.txns)
             }
             let txns = StatementParser.parse(text: text, pages: pages)
-            let account = StatementParser.account(text)
+            var account = StatementParser.account(text)
+            if account != nil, account!.asOf == nil { account!.asOf = txns.map(\.date).max() }
             guard !txns.isEmpty || account != nil else { throw StatementError.noTransactions }
             return ImportResult(accounts: account.map { [$0] } ?? [], txns: txns)
         }

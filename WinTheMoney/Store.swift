@@ -388,7 +388,7 @@ final class Store: ObservableObject {
     /// `adjustBalances` true only for live feeds (Gmail) where each new txn moves the
     /// running balance; statement/CSV/AA imports are historical and must not.
     @discardableResult
-    func mergeSynced(accounts: [SyncedAccount], txns incoming: [SyncedTxn], adjustBalances: Bool = false) -> Int {
+    func mergeSynced(accounts: [SyncedAccount], txns incoming: [SyncedTxn], adjustBalances: Bool = false, reconcile: Bool = false) -> Int {
         for a in accounts { upsertAccount(a) }
         let known = Set(self.txns.compactMap(\.externalId))
         var added = 0
@@ -397,9 +397,15 @@ final class Store: ObservableObject {
             if s.source == .card { ensureCard(mask: s.accountMask, bankCode: s.bankCode) }
             else if s.source == .bank { ensureBank(mask: s.accountMask, bankCode: s.bankCode) }
 
+            let accName = accountName(forMask: s.accountMask, source: s.source)
+            // Statement imports reconcile against existing alert transactions by amount+date so the
+            // same event isn't stored twice with two different merchant spellings.
+            if reconcile, let i = duplicateBankIndex(for: s, accountName: accName) {
+                if txns[i].statementId == nil { enrichBank(&txns[i], with: s) }
+                continue   // already have this transaction — don't add, don't move the balance
+            }
             let merchant = s.merchant ?? Self.prettyMerchant(s.narration)
             let cl = classify(merchant: merchant, counterparty: s.counterparty, narration: s.narration, income: s.amount > 0)
-            let accName = accountName(forMask: s.accountMask, source: s.source)
             txns.insert(Txn(merchant: merchant, symbol: cl.symbol, category: cl.category, account: accName,
                             amount: s.amount, date: s.date, externalId: s.externalId,
                             source: s.source, counterparty: s.counterparty, tags: cl.tags, transfer: cl.transfer), at: 0)
@@ -475,6 +481,44 @@ final class Store: ObservableObject {
         for i in txns.indices where txns[i].account == old { txns[i].account = new }
     }
 
+    /// Reconstruct a live bank balance from a statement's stated closing: add every transaction for
+    /// this account dated strictly after the statement's as-of date. This is why a May-31 statement
+    /// no longer pins the balance to May when June alerts already arrived. Called *before* the
+    /// statement's own (≤ asOf) transactions are inserted, so they're never double-counted.
+    private func liveBalance(statedBalance: Double, asOf: Date?, accountName: String) -> Double {
+        guard let asOf else { return statedBalance }
+        let later = txns.filter { $0.account == accountName && $0.date > asOf }.map(\.amount).reduce(0, +)
+        return statedBalance + later
+    }
+
+    /// Finds an existing transaction that is the same real-world event as `s` regardless of merchant
+    /// text (alert vs statement spell the payee differently): same account, same sign, equal amount,
+    /// within a few days. Used to stop bank statements from duplicating Gmail alert transactions.
+    private func duplicateBankIndex(for s: SyncedTxn, accountName: String) -> Int? {
+        let target = abs(s.amount), inc = s.amount > 0
+        var best: Int? = nil, bestDelta = Double.greatestFiniteMagnitude
+        for (i, t) in txns.enumerated() where t.account == accountName && t.income == inc {
+            guard t.externalId != s.externalId, abs(abs(t.amount) - target) < 0.01 else { continue }
+            let delta = abs(t.date.timeIntervalSince(s.date))
+            if delta <= 4 * 86400, delta < bestDelta { best = i; bestDelta = delta }
+        }
+        return best
+    }
+    /// Enrich a prior alert transaction with a bank statement's better data (cleaner merchant,
+    /// category, tags) and mark it statement-confirmed. Unlike `enrich`, never forces `.card`.
+    private func enrichBank(_ t: inout Txn, with s: SyncedTxn) {
+        if let m = s.merchant, !m.isEmpty, m.count > t.merchant.count { t.merchant = m }
+        if let c = s.category, !c.isEmpty {
+            t.category = c
+            t.symbol = categories.first { $0.name == c }?.symbol ?? Self.symbolFor(c)
+        }
+        if (t.counterparty ?? "").isEmpty, let cp = s.counterparty { t.counterparty = cp }
+        let cl = classify(merchant: t.merchant, counterparty: t.counterparty, narration: s.narration, income: t.amount > 0)
+        t.tags = Self.uniq(t.tags + cl.tags)
+        if cl.transfer { t.transfer = true }
+        if t.statementId == nil { t.statementId = s.externalId }
+    }
+
     /// Unique, ordered bank + card display names for pickers.
     var accountNames: [String] {
         var seen = Set<String>()
@@ -520,7 +564,7 @@ final class Store: ObservableObject {
             n += res.added + res.enriched
         }
         let bankTxns = r.txns.filter { t in !cards.contains { $0.mask == t.accountMask } }
-        if !banks.isEmpty || !bankTxns.isEmpty { n += mergeSynced(accounts: banks, txns: bankTxns) }
+        if !banks.isEmpty || !bankTxns.isEmpty { n += mergeSynced(accounts: banks, txns: bankTxns, reconcile: true) }
         mergeDeposits(r.deposits)
         return n
     }
@@ -571,7 +615,9 @@ final class Store: ObservableObject {
             return
         }
         if let i = banks.firstIndex(where: { $0.mask == a.mask }) {
-            if a.balance != 0 { banks[i].balance = a.balance }
+            // A statement's closing balance is stated *as of* its period end. Don't clobber a newer
+            // live balance with it — reconstruct by adding transactions dated after the statement.
+            if a.balance != 0 { banks[i].balance = liveBalance(statedBalance: a.balance, asOf: a.asOf, accountName: banks[i].name) }
             if banks[i].bankCode == nil { banks[i].bankCode = a.bankCode }
             if banks[i].ifsc == nil { banks[i].ifsc = a.ifsc }
             if banks[i].branch == nil { banks[i].branch = a.branch }
