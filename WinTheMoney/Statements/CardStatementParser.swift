@@ -89,6 +89,11 @@ enum CardStatementParser {
             // first C-amount on the row (later "C…" tokens can be trailing summaries / refs)
             guard let amt = lastMoney(#"C\s*([\d,]+\.\d{2})"#, g, lazyFirst: true) else { continue }
             var m = replace(#"^\d{2}/\d{2}/\d{4}\s*\|\s*\d{2}:\d{2}\s*"#, in: g, with: "")
+            // HDFC prefixes "EMI " on any domestic-spend row it thinks is *eligible* to convert to
+            // EMI (see "Eligible for EMI TRANSACTIONS" / "CONVERT TO EMI" section) — it's an offer
+            // marker, not part of the merchant name, and must not be confused with a genuine EMI/loan
+            // charge (those read "EMI INTEREST/PRINCIPAL" or "MER EMI ,INT ...", never bare "EMI <name>").
+            m = replace(#"^EMI\s+(?!(?:INTEREST|PRINCIPAL)\b)"#, in: m, with: "")
             m = replace(#"(?:[+\-]\s*\d+\s*)?C\s*[\d,]+\.\d{2}[\s\S]*$"#, in: m, with: "")
             m = replace(#"\(Ref#[^)]*\)"#, in: m, with: "")
             // reward points earned: the "+ N" sitting just before the row's C-amount ("+ 5 C 164.00").
