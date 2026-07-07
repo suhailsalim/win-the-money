@@ -1,7 +1,7 @@
 # MkDocs site for Win the Money.
 # Serve locally:  pip install mkdocs-material && mkdocs serve
 # Build static:   mkdocs build   (outputs to site/, gitignored)
-site_name: Win the Money
+site_name: Nidhi
 site_description: A private, on-device personal-finance app for iOS — INR-first, no backend, no analytics.
 repo_url: https://github.com/suhailsalim/win-the-money
 repo_name: win-the-money

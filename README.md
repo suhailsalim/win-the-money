@@ -1,4 +1,6 @@
-# Win the Money
+# Nidhi — निधि
+
+*(formerly "Win the Money" — code names, targets and bundle id keep the old name)*
 
 A private, on-device personal-finance tracker for iOS — built in SwiftUI for Indian banking
 (₹/INR-first). It tracks **net worth, bank & card balances, transactions, budgets, fixed/recurring
