@@ -1,4 +1,4 @@
-# AGENTS.md — Win the Money
+# AGENTS.md — Nidhi (code name: Win the Money)
 
 Guidance for humans and AI coding agents working in this repo. Read this first; it exists to prevent
 re-deriving the architecture from scratch every session. Feature deep-dives live in [`docs/`](docs/).

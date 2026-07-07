@@ -1,6 +1,6 @@
-# Win the Money
+# Nidhi — निधि
 
-A **private, on-device personal-finance app for iOS** — built for Indian banking, ₹/INR-first.
+*Nidhi* (treasure, a fund kept safely) is a **private, on-device personal-finance app for iOS** — built for Indian banking, ₹/INR-first.
 No backend, no analytics, no third-party SDKs. Everything — your transactions, balances, statements,
 even the AI summaries — is processed on your device.
 
