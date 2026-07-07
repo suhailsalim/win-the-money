@@ -9,7 +9,7 @@ Views (SwiftUI)  ⇄  Store (ObservableObject)  ⇄  Persistence (UserDefaults J
                          └─ derived totals computed on Store (net worth, spent, P&L…)
 ```
 
-`Store` (`WinTheMoney/Store.swift`) is the **single source of truth**. It owns every `@Published`
+`Store` (`WinTheMoney/State/Store.swift`) is the **single source of truth**. It owns every `@Published`
 collection, all mutations (add/update/remove/merge), and all derived values. Views are thin: they read
 published state and call `Store` methods. There is no separate view-model layer.
 

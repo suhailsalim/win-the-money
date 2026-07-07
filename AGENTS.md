@@ -28,14 +28,14 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 
 ## Architecture in one screen
 
-- **`Store` (`WinTheMoney/Store.swift`) is the single source of truth** — an `ObservableObject` holding
+- **`Store` (`WinTheMoney/State/Store.swift`) is the single source of truth** — an `ObservableObject` holding
   every `@Published` collection and all derived totals + mutations. Views are thin and read/write `Store`.
   Published state: `categories, txns, banks, cards, deposits, goals, milestones, badges, investments,`
   `incomeStreams, merchantRules, fxRates, nwHistory`, plus settings/profile fields.
-- **Models** (`WinTheMoney/Models.swift`): `BudgetCategory, Txn, TxnSource, BankAccount, CreditCard,`
+- **Models** (`WinTheMoney/State/Models.swift`): `BudgetCategory, Txn, TxnSource, BankAccount, CreditCard,`
   `Deposit, InvestmentKind, Investment, Goal/GoalStatus, Milestone, Badge, IncomeStream, PlanMonth,`
   `Segment, Tab, Currencies`. Plain `Codable` structs.
-- **Persistence** (`WinTheMoney/Persistence.swift`): one `Persist` blob in UserDefaults; **tolerant**
+- **Persistence** (`WinTheMoney/State/Persistence.swift`): one `Persist` blob in UserDefaults; **tolerant**
   custom `init(from:)` per model. **RULE:** new stored properties must decode with a default — never
   let decoding throw. See the file header and [`docs/persistence-and-backup.md`](docs/persistence-and-backup.md).
 - **UI**: `RootView.swift` is a 6-tab `TabView` → `HomeView, PlanView, InsightsView, GoalsView,`
@@ -43,22 +43,31 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   sheets and Settings. `Components.swift` + `Theme.swift` (`Zen` palette) are the design system.
 - **Entry**: `WinTheMoneyApp.swift` (`@main`), injects `Store`, runs background tasks.
 
-## File map (by responsibility)
+## File map (by folder)
 
-| Area | Files |
-|------|-------|
-| State + logic | `Store.swift`, `Models.swift`, `Persistence.swift`, `BackupManager.swift` |
-| UI tabs | `RootView.swift`, `HomeView/PlanView/InsightsView/GoalsView/WealthView/IncomeView.swift` |
-| UI shared | `Sheets.swift`, `Components.swift`, `Theme.swift`, `AccountsView.swift` |
-| Statement PDFs | `StatementImporter.swift`, `StatementParsers.swift`, `CardStatementParser.swift`, `PDFTableReader.swift`, `SpreadsheetImporter.swift`, `StatementVault.swift`, `StatementBackground.swift` |
-| Gmail | `GmailManager.swift`, `GmailProvider.swift`, `GmailBackground.swift`, `EmailTransactionParser.swift` |
-| Income & tax | `TaxEngine.swift` (slab estimate, both regimes), `PayslipParser.swift`, `IncomeView.swift` |
-| AI (opt-in) | `AI.swift` (multi-provider `AIManager`), `AIInsights.swift` (aggregate summary), `AIView.swift` |
-| Categorisation | `BrandCatalog.swift` (+ `Store.classify` / `recategorizeAll`) |
-| Catalogs | `BankCatalog.swift`, `CardCatalog.swift`, `MarketCatalog.swift` |
-| Investments / market | `QuoteProvider.swift`, `FXProvider.swift` |
-| Account Aggregator | `BankSync.swift`, `SetuAAClient.swift`, `SyncManager.swift`, `BankSyncUI.swift` |
-| Platform | `Keychain.swift`, `Notifications.swift`, `LiveActivity.swift`, `WinTheMoneyApp.swift`, `WinTheMoneyWidgets/` |
+Sources live in folders under `WinTheMoney/` (the Xcode project uses file-system-synchronized
+groups, so the folder tree IS the project structure — add/move files on disk and Xcode follows):
+
+| Folder | Contents |
+|--------|----------|
+| `App/` | `WinTheMoneyApp.swift` (@main), `RootView.swift` (6-tab TabView) |
+| `State/` | `Store.swift` (single source of truth), `Models.swift`, `Persistence.swift`, `BackupManager.swift` |
+| `UI/` | Tab views (`HomeView/PlanView/InsightsView/GoalsView/WealthView/IncomeView.swift`), `AccountsView.swift`, `Sheets.swift` (add/edit sheets + Settings), `Components.swift` + `Theme.swift` (Zen design system), `BankSyncUI.swift`, `AIView.swift` |
+| `Statements/` | `StatementImporter.swift` (routing + OCR), `StatementParsers.swift` (bank), `CardStatementParser.swift` (cards), `PDFTableReader.swift`, `SpreadsheetImporter.swift`, `StatementVault.swift`, `StatementBackground.swift` |
+| `Gmail/` | `GmailManager.swift`, `GmailProvider.swift`, `GmailBackground.swift`, `EmailTransactionParser.swift` |
+| `AccountAggregator/` | `BankSync.swift` (import DTOs), `SetuAAClient.swift`, `SyncManager.swift` |
+| `Income/` | `TaxEngine.swift` (slab estimate, both regimes), `PayslipParser.swift` |
+| `AI/` | `AI.swift` (multi-provider `AIManager`), `AIInsights.swift` (aggregate-only summary) |
+| `Catalogs/` | `BankCatalog.swift`, `CardCatalog.swift`, `BrandCatalog.swift` (+ `Store.classify`), `MarketCatalog.swift` |
+| `Market/` | `QuoteProvider.swift` (Yahoo/AMFI), `FXProvider.swift` |
+| `Platform/` | `Keychain.swift`, `Notifications.swift`, `LiveActivity.swift` |
+
+Top level: `Assets.xcassets` + `WinTheMoney.entitlements` stay at `WinTheMoney/` root (referenced by
+explicit path). `Shared/` (widget snapshot) and `WinTheMoneyWidgets/` are separate targets;
+`Info.plist` / `WinTheMoneyWidgets-Info.plist` sit at repo root (pbxproj paths). Other repo dirs:
+`docs/` (MkDocs: user guide + dev docs), `plans/` (execution plans, see `plans/README.md`),
+`design/` (icons + logo sources), `tools/parser-harness/fixtures/` (local-only real statement PDFs,
+gitignored), `.claude/skills/` (committed agent skills).
 
 ## Conventions
 
