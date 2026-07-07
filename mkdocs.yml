@@ -1,0 +1,66 @@
+# MkDocs site for Win the Money.
+# Serve locally:  pip install mkdocs-material && mkdocs serve
+# Build static:   mkdocs build   (outputs to site/, gitignored)
+site_name: Win the Money
+site_description: A private, on-device personal-finance app for iOS — INR-first, no backend, no analytics.
+repo_url: https://github.com/suhailsalim/win-the-money
+repo_name: win-the-money
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle: { icon: material/weather-sunny, name: Light mode }
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+
+# docs/README.md is the developer-docs index (kept for GitHub browsing); index.md is the site home.
+exclude_docs: |
+  README.md
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Getting started: guide/getting-started.md
+      - Accounts, cards & deposits: guide/accounts.md
+      - Transactions & categories: guide/transactions.md
+      - Importing statements: guide/importing-statements.md
+      - Gmail & bank sync: guide/gmail-and-bank-sync.md
+      - Budgets & the Plan tab: guide/budgets.md
+      - Goals & gamification: guide/goals.md
+      - Wealth & investments: guide/wealth.md
+      - Income & tax: guide/income-and-tax.md
+      - Insights & AI: guide/insights-and-ai.md
+      - Widgets & notifications: guide/widgets-and-notifications.md
+      - Backup, privacy & data: guide/backup-and-privacy.md
+      - Troubleshooting: guide/troubleshooting.md
+  - Developer:
+      - Architecture: architecture.md
+      - Persistence & backup: persistence-and-backup.md
+      - Accounts, cards & deposits: accounts-cards-deposits.md
+      - Statements & import: statements-and-import.md
+      - Transactions & categories: transactions-and-categories.md
+      - Investments: investments.md
+      - Budgets & insights: budgets-insights.md
+      - Goals, income & tax: goals-income-tax.md
+      - Gamification: gamification.md
+      - Integrations: integrations.md

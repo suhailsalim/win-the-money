@@ -20,11 +20,14 @@ xcuserdata/
 # OpenWolf — local project-intelligence + token ledger (regenerate with `openwolf init`)
 .wolf/
 
-# Claude Code — local hooks/settings (OpenWolf re-registers these on `openwolf init`)
-.claude/
+# Claude Code — local hooks/settings stay ignored (OpenWolf re-registers these on
+# `openwolf init`), but project skills are shared and committed.
+.claude/*
+!.claude/skills/
 
 # Local tooling / scratch
 /tmp/
 *.log
 # Real bank/card statements must never be committed (AGENTS.md). Ignore all PDFs.
 *.pdf
+site/
