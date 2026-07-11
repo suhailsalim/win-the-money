@@ -20,4 +20,39 @@ enum NotificationManager {
             center.add(UNNotificationRequest(identifier: reminderId, content: content, trigger: trigger))
         }
     }
+
+    private static func cardDueId(_ mask: String, _ suffix: String) -> String { "carddue-\(mask)-\(suffix)" }
+
+    /// Schedule two reminders for a card bill: T-3 days and the due-day morning. Reschedules by
+    /// cancelling the card's existing reminders first; never schedules a trigger in the past.
+    static func scheduleCardDue(mask: String, cardName: String, dueDate: Date, totalDue: Double?) {
+        let center = UNUserNotificationCenter.current()
+        cancelCardDue(mask: mask)
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            guard granted else { return }
+            let cal = Calendar.current
+            let amount = totalDue.map { " of ₹\(NumberFormatter.localizedString(from: NSNumber(value: $0), number: .decimal))" } ?? ""
+            let plan: [(suffix: String, fire: Date, body: String)] = [
+                ("t3", cal.date(byAdding: .day, value: -3, to: dueDate).map { cal.date(bySettingHour: 10, minute: 0, second: 0, of: $0) ?? $0 } ?? dueDate,
+                 "Your \(cardName) bill\(amount) is due in 3 days."),
+                ("due", cal.date(bySettingHour: 9, minute: 0, second: 0, of: dueDate) ?? dueDate,
+                 "Your \(cardName) bill\(amount) is due today."),
+            ]
+            for p in plan where p.fire > Date() {
+                let content = UNMutableNotificationContent()
+                content.title = "Card payment due"
+                content.body = p.body
+                content.sound = .default
+                let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: p.fire)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+                center.add(UNNotificationRequest(identifier: cardDueId(mask, p.suffix), content: content, trigger: trigger))
+            }
+        }
+    }
+
+    /// Cancel a card's pending due reminders (e.g. once the bill is paid).
+    static func cancelCardDue(mask: String) {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [cardDueId(mask, "t3"), cardDueId(mask, "due")])
+    }
 }

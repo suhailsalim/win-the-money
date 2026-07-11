@@ -131,7 +131,42 @@ struct CreditCard: Identifiable, Codable, Hashable {
     var imageRef: String? = nil
     var rewardKind: String? = nil    // Points / Miles / Coins / Cashback
     var rewardBalance: Double? = nil
+    // Current statement's payment figures (from the last imported statement). All optional so
+    // pre-feature cards decode cleanly; the due chip/reminders simply stay hidden when absent.
+    var totalDue: Double? = nil
+    var minDue: Double? = nil
+    var dueDate: Date? = nil
+    /// Set when a bill payment ≥ minDue lands after the statement date — silences the reminder
+    /// and flips the chip to "Paid" without waiting for the next statement.
+    var dueClearedAt: Date? = nil
+
     var util: Int { limit > 0 ? Int((outstanding / limit * 100).rounded()) : 0 }
+
+    /// Whole days from today (start-of-day) to the due date; negative once overdue. nil = no due date.
+    var daysUntilDue: Int? {
+        guard let dueDate else { return nil }
+        let cal = Calendar.current
+        return cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: dueDate)).day
+    }
+    /// True once a qualifying payment has cleared the current statement's due.
+    var duePaid: Bool {
+        guard let dueClearedAt, let dueDate else { return false }
+        return dueClearedAt >= dueDate.addingTimeInterval(-45 * 86400)   // cleared for this cycle
+    }
+    /// A short "due in N days" / "due today" / "overdue" label, or "Paid". nil when no due date.
+    var dueChip: (text: String, overdue: Bool)? {
+        guard let d = daysUntilDue else { return nil }
+        if duePaid { return ("Paid", false) }
+        if d < 0 { return ("Overdue", true) }
+        if d == 0 { return ("Due today", true) }
+        if d == 1 { return ("Due tomorrow", d <= 3) }
+        return ("Due in \(d) days", d <= 3)
+    }
+    /// Cards worth nudging on Home: a real due date, not yet paid, within 5 days (incl. overdue).
+    var needsDueAttention: Bool {
+        guard let d = daysUntilDue, !duePaid else { return false }
+        return d <= 5
+    }
     var rewardLabel: String? {
         guard let k = rewardKind, let b = rewardBalance else { return nil }
         let g = NumberFormatter.localizedString(from: NSNumber(value: b), number: .decimal)

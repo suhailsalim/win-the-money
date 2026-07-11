@@ -804,6 +804,30 @@ final class Store: ObservableObject {
                 if !txns[bi].tags.contains("Credit card bill") { txns[bi].tags.append("Credit card bill") }
             }
         }
+        reconcileCardDues()
+    }
+
+    /// Flip a card's due to "cleared" once a bill payment ≥ its minimum lands after the statement —
+    /// silences the reminder without waiting for the next statement. `dueClearedAt` makes this sticky
+    /// so a payment made before the next import doesn't re-alert. Reuses the existing card-payment
+    /// classification (correlateTransfers) rather than adding a second matcher.
+    private func reconcileCardDues() {
+        for i in cards.indices {
+            guard let dueOn = cards[i].dueDate, cards[i].dueClearedAt == nil else { continue }
+            let minDue = cards[i].minDue ?? 0
+            // A payment is a card-side credit dated on/after the statement (≈ due date − 40d).
+            let statementFloor = dueOn.addingTimeInterval(-40 * 86400)
+            let payment = txns.first { t in
+                t.source == .card && t.account == cards[i].name && t.amount > 0
+                    && t.date >= statementFloor
+                    && (t.transfer || Classifier.isCardPaymentCredit(t.merchant))
+                    && t.amount + 0.01 >= minDue
+            }
+            if let payment {
+                cards[i].dueClearedAt = payment.date
+                NotificationManager.cancelCardDue(mask: cards[i].mask)
+            }
+        }
     }
 
     /// Import a parsed statement (single or combined): cards reconcile via mergeStatement, bank
@@ -902,6 +926,16 @@ final class Store: ObservableObject {
                 }
                 if let rk = a.rewardKind { cards[i].rewardKind = rk }
                 if let rb = a.rewardBalance { cards[i].rewardBalance = rb }
+                // Card bill due: only advance to a *newer* statement's figures (forward-only, like the
+                // balance anchor) so re-importing an older statement can't resurrect a stale due date.
+                if let dueOn = a.dueDate, cards[i].dueDate == nil || dueOn > cards[i].dueDate! {
+                    cards[i].dueDate = dueOn
+                    cards[i].totalDue = a.totalDue ?? (a.balance > 0 ? a.balance : nil)
+                    cards[i].minDue = a.minDue
+                    cards[i].dueClearedAt = nil   // new statement cycle — re-arm the reminder
+                    NotificationManager.scheduleCardDue(mask: cards[i].mask, cardName: cards[i].name,
+                                                        dueDate: dueOn, totalDue: cards[i].totalDue)
+                }
             }
             return
         }

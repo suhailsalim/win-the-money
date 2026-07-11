@@ -42,6 +42,8 @@ enum CardStatementParser {
         let mask = cap(#"X{2,}(\d{4})"#, text) ?? ""
         let limit = headerMoney(["TOTAL CREDIT LIMIT"], text, gap: 50)
         let due = headerMoney(["TOTAL AMOUNT DUE"], text, gap: 50)
+        let minDue = headerMoney(["MINIMUM AMOUNT DUE"], text, gap: 50)
+        let dueOn = dueDate(["Payment Due Date", "PAYMENT DUE DATE"], text)
         let product = pickProduct(.hdfc, text)
         let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
         // HDFC groups spend under an ALL-CAPS cardholder header (primary listed first, then each
@@ -110,7 +112,7 @@ enum CardStatementParser {
                            forexCurrency: fx?.currency, forexAmount: fx?.amount, isInternational: isIntl))
         }
         let rw = reward("Points", #"Reward Points[\s\S]{0,15}?([\d,]{2,})"#, text)
-        return (cardAccount(.hdfc, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
+        return (cardAccount(.hdfc, mask: mask, due: due, limit: limit, product: product, reward: rw, minDue: minDue, dueDate: dueOn), txns)
     }
     private static func hdfcNoise(_ l: String) -> Bool {
         l.contains("Diners") || l.contains("Page ") || l.contains("HDFC Bank Credit Cards") ||
@@ -123,6 +125,8 @@ enum CardStatementParser {
         let limit = cap(#"Credit Limit\s+([\d,]+\.\d{2})\s+Available"#, text).flatMap(money)
         let availLimit = cap(#"Available Credit Limit\s+([\d,]+\.\d{2})"#, text).flatMap(money)
         let due = lastMoney(#"Total Payment Due[\s\S]{0,90}?\n\s*([\d,]+\.\d{2})"#, text, lazyFirst: true)
+        let minDue = lastMoney(#"Minimum Payment Due[\s\S]{0,90}?\n\s*([\d,]+\.\d{2})"#, text, lazyFirst: true)
+        let dueOn = dueDate(["Payment Due Date"], text)
         let product = pickProduct(.axis, text)
         var txns: [SyncedTxn] = []
         var lastDate: Date? = nil
@@ -145,7 +149,7 @@ enum CardStatementParser {
                            forexCurrency: fx?.currency, forexAmount: fx?.amount, isInternational: fx != nil))
         }
         let rw = reward("Miles", #"eDGE MILES[\s\S]{0,600}?([\d,]{3,})\s+\d{2}-\d{2}-\d{4}"#, text)
-        return (cardAccount(.axis, mask: mask, due: due, limit: limit, product: product, reward: rw, availableLimit: availLimit), txns)
+        return (cardAccount(.axis, mask: mask, due: due, limit: limit, product: product, reward: rw, availableLimit: availLimit, minDue: minDue, dueDate: dueOn), txns)
     }
 
     /// Axis prints an MCC "MERCHANT CATEGORY" column as the trailing word(s) of each spend row (before
@@ -195,6 +199,8 @@ enum CardStatementParser {
         // anchor to the ` (₹) glyph so MITC sample limits (e.g. "Credit Limit 35,000") aren't matched
         let limit = cap(#"Credit Limit \(Including cash\)[\s\S]{0,160}?`\s*([\d,]+\.\d{2})"#, text).flatMap(money)
         let due = cap(#"Total Amount due[\s\S]{0,160}?`\s*([\d,]+\.\d{2})"#, text).flatMap(money)
+        let minDue = cap(#"Minimum Amount due[\s\S]{0,160}?`\s*([\d,]+\.\d{2})"#, text).flatMap(money)
+        let dueOn = dueDate(["Payment Due Date", "Due Date"], text)
         let product = pickProduct(.icici, text)
         let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
         let recs = records(lines, start: { matches(#"^\d{2}/\d{2}/\d{4}\s+\d{6,}\s"#, $0) },
@@ -213,7 +219,7 @@ enum CardStatementParser {
                            reward: pts, rewardCurrency: rewardUnit(.icici)))
         }
         let rw = reward("Cashback", #"EARNINGS[\s\S]{0,200}?\b(\d{1,7})\s+\1\b"#, text)
-        return (cardAccount(.icici, mask: mask, due: due, limit: limit, product: product, reward: rw), txns)
+        return (cardAccount(.icici, mask: mask, due: due, limit: limit, product: product, reward: rw, minDue: minDue, dueDate: dueOn), txns)
     }
 
     // MARK: - Scapia (Federal) — "₹" glyph, multi-line rows; credits shown as "+₹" / Payment / Refund
@@ -221,6 +227,8 @@ enum CardStatementParser {
         let mask = cap(#"X{2,}(\d{4})"#, text) ?? ""
         let limit = headerMoney(["Total Limit"], text, gap: 20)
         let due = headerMoney(["Total Due", "New balance"], text, gap: 20)
+        let minDue = headerMoney(["Minimum Due", "Minimum Amount Due"], text, gap: 20)
+        let dueOn = dueDate(["Payment Due Date", "Due Date"], text)
         // Scapia lists rows either inline ("date merchant ₹amount") or in columns
         // (merchant1, merchant2, …, then amount1, amount2, …). Collect merchants (each
         // opened by a date line) and amounts in document order, then zip — works for both.
@@ -277,20 +285,37 @@ enum CardStatementParser {
             }
         }
         let rw = reward("Coins", #"into\s+([\d,]+)\s+Scapia Coins"#, text) ?? reward("Coins", #"([\d,]+)\s+Scapia Coins"#, text)
-        return (cardAccount(.federal, mask: mask, due: due, limit: limit, product: "Scapia Federal", reward: rw), txns)
+        return (cardAccount(.federal, mask: mask, due: due, limit: limit, product: "Scapia Federal", reward: rw, minDue: minDue, dueDate: dueOn), txns)
     }
 
     // MARK: - shared builders
     private static func cardAccount(_ issuer: Issuer, mask: String, due: Double?, limit: Double?,
                                     product: String?, reward: (String, Double)? = nil,
-                                    availableLimit: Double? = nil) -> SyncedAccount {
+                                    availableLimit: Double? = nil,
+                                    minDue: Double? = nil, dueDate: Date? = nil) -> SyncedAccount {
         let code = issuer == .generic ? nil : issuer.rawValue
         // Fallback: if the printed total limit is missing, derive it from available limit + outstanding
         // (total = available + spent). Keeps the card's limit populated across label variations.
         let resolvedLimit = limit ?? availableLimit.flatMap { av in due.map { av + $0 } }
         return SyncedAccount(bank: BankCatalog.info(code)?.name ?? "Card", mask: mask, type: "Credit card",
                              balance: due ?? 0, kind: .card, bankCode: code, limit: resolvedLimit, cardName: product,
-                             rewardKind: reward?.0, rewardBalance: reward?.1)
+                             rewardKind: reward?.0, rewardBalance: reward?.1,
+                             totalDue: due, minDue: minDue, dueDate: dueDate)
+    }
+
+    /// Parse a "Payment Due Date" printed on a card statement. Indian statements use DD/MM/YYYY or
+    /// DD-MM-YYYY (and occasionally "DD Mon YYYY"); we parse with an explicit format list under
+    /// en_US_POSIX so the numeric day/month order is never reinterpreted by a US locale.
+    private static func dueDate(_ labels: [String], _ text: String) -> Date? {
+        for label in labels {
+            let pat = #"\#(label)[\s:]*[\r\n ]{0,4}(\d{1,2}[/\-. ][A-Za-z0-9]{2,3}[/\-. ]\d{2,4})"#
+            if let raw = cap(pat, text),
+               let d = parseDate(raw.replacingOccurrences(of: ".", with: "/"),
+                                 ["dd/MM/yyyy", "dd-MM-yyyy", "dd MMM yyyy", "d/M/yyyy", "d-M-yyyy", "dd/MM/yy"]) {
+                return d
+            }
+        }
+        return nil
     }
     private static func reward(_ kind: String, _ pattern: String, _ text: String) -> (String, Double)? {
         guard let v = cap(pattern, text).flatMap(money) else { return nil }
