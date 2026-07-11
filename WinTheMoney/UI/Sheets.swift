@@ -1035,7 +1035,9 @@ struct SettingsSheet: View {
     @EnvironmentObject var gmail: GmailManager
     @EnvironmentObject var sync: SyncManager
     @EnvironmentObject var ai: AIManager
+    @EnvironmentObject var lock: AppLock
     @Environment(\.dismiss) private var dismiss
+    @State private var lockError: String?
     @State private var showExportJSON = false
     @State private var showExportCSV = false
     @State private var showImport = false
@@ -1051,6 +1053,7 @@ struct SettingsSheet: View {
                 profileHeader
                 profileSection
                 connectionsSection
+                securitySection
                 notificationsSection
                 backupSection
                 dataSection
@@ -1146,6 +1149,31 @@ struct SettingsSheet: View {
             }
         } header: { Text("Accounts & data") }
         footer: { Text("Account Aggregator is off by default. Turn it on to connect banks via Setu; otherwise no AA sync ever runs.") }
+    }
+
+    @ViewBuilder private var securitySection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { lock.enabled },
+                set: { want in
+                    if want {
+                        // Refuse to enable if we can't authenticate — avoids locking the user out.
+                        let check = lock.canAuthenticate()
+                        guard check.ok else { lockError = check.reason; return }
+                    }
+                    lockError = nil
+                    lock.enabled = want
+                }
+            )) { Label("App lock (Face ID)", systemImage: "faceid") }
+            if lock.enabled {
+                Picker(selection: $lock.grace) {
+                    ForEach(AppLock.Grace.allCases) { Text($0.label).tag($0) }
+                } label: { Label("Require unlock", systemImage: "clock") }
+            }
+            if let lockError { Text(lockError).font(.caption).foregroundStyle(Zen.caution) }
+        } header: { Text("Security") } footer: {
+            Text("Locks the app with Face ID / Touch ID (passcode fallback) and hides balances in the app switcher. Home-screen widgets can still show numbers — iOS renders them outside the app.")
+        }
     }
 
     @ViewBuilder private var notificationsSection: some View {
