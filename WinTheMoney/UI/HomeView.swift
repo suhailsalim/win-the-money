@@ -11,6 +11,7 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 22) {
             if !gmail.pending.isEmpty { pendingBanner }
+            if !dueCards.isEmpty { cardDueBanner }
             hero
             statRow
 
@@ -87,6 +88,40 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .zenCard(tinted: Zen.caution, 20)
         }.buttonStyle(.plain)
+    }
+
+    // MARK: card-due banner — any card whose bill is due within 5 days (incl. overdue) and unpaid.
+    private var dueCards: [CreditCard] {
+        store.cards.filter(\.needsDueAttention)
+            .sorted { ($0.daysUntilDue ?? 99) < ($1.daysUntilDue ?? 99) }
+    }
+    private var cardDueBanner: some View {
+        Button { sheet = .accounts } label: {
+            HStack(spacing: 12) {
+                IconChip(symbol: "creditcard.trianglebadge.exclamationmark", tint: Zen.accentDeep)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(dueBannerTitle).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                    Text(dueBannerSubtitle).font(.caption2).foregroundStyle(Zen.ink2).lineLimit(2)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Zen.ink3)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .zenCard(tinted: Zen.accent, 20)
+        }.buttonStyle(.plain)
+    }
+    private var dueBannerTitle: String {
+        if dueCards.count == 1, let c = dueCards.first, let chip = c.dueChip {
+            return "\(c.name) · \(chip.text.lowercased())"
+        }
+        return "\(dueCards.count) card bills due soon"
+    }
+    private var dueBannerSubtitle: String {
+        if dueCards.count == 1, let c = dueCards.first, let total = c.totalDue, total > 0 {
+            return "Pay \(INR.compact(total)) to avoid interest and late fees"
+        }
+        return "Tap to review your cards and pay before the due date"
     }
 
     // generic titled section

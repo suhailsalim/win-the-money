@@ -94,7 +94,7 @@ extension BankAccount {
 
 // MARK: CreditCard
 extension CreditCard {
-    enum CodingKeys: String, CodingKey { case id, name, mask, outstanding, limit, bankCode, network, tier, colorHex, imageRef, rewardKind, rewardBalance }
+    enum CodingKeys: String, CodingKey { case id, name, mask, outstanding, limit, bankCode, network, tier, colorHex, imageRef, rewardKind, rewardBalance, totalDue, minDue, dueDate, dueClearedAt }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.decode(.id, default: UUID())
@@ -109,6 +109,10 @@ extension CreditCard {
         imageRef = c.decode(.imageRef, default: nil)
         rewardKind = c.decode(.rewardKind, default: nil)
         rewardBalance = c.decode(.rewardBalance, default: nil)
+        totalDue = c.decode(.totalDue, default: nil)
+        minDue = c.decode(.minDue, default: nil)
+        dueDate = c.decode(.dueDate, default: nil)
+        dueClearedAt = c.decode(.dueClearedAt, default: nil)
     }
 }
 

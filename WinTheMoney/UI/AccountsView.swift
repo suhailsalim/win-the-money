@@ -254,8 +254,22 @@ struct AccountsView: View {
     private func cardRow(_ c: CreditCard) -> some View {
         VStack(spacing: 8) {
             CardCoverView(card: c, bankName: BankCatalog.info(c.bankCode)?.name ?? c.name)
+            if let chip = c.dueChip {
+                HStack(spacing: 6) {
+                    Image(systemName: chip.text == "Paid" ? "checkmark.circle.fill" : "calendar.badge.clock")
+                        .font(.caption2)
+                    Text(dueChipText(c, chip.text)).font(.caption2.weight(.semibold))
+                    Spacer()
+                }
+                .foregroundStyle(chip.text == "Paid" ? Zen.greenDeep : (chip.overdue ? Zen.caution : Zen.ink3))
+            }
             ZenBar(value: Double(c.util)/100, tint: AnyShapeStyle(Color(hex: c.utilColorHex)))
         }
+    }
+
+    private func dueChipText(_ c: CreditCard, _ base: String) -> String {
+        guard base != "Paid", let total = c.totalDue, total > 0 else { return base }
+        return "\(base) · \(INR.compact(total))"
     }
 
     private func investmentRow(_ i: Investment) -> some View {
