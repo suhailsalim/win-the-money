@@ -212,14 +212,21 @@ struct SectionHeader: View {
 // MARK: - Icon chip (native SF Symbol on Liquid Glass)
 struct IconChip: View {
     var symbol: String
+    var brandIcon: String? = nil   // Assets.xcassets image name — a real brand mark, shown untinted instead of `symbol`
     var size: CGFloat = 36
     var tint: Color = Zen.accentDeep
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: size * 0.42, weight: .semibold))
-            .foregroundStyle(tint)
-            .frame(width: size, height: size)
-            .glassEffect(.regular, in: .rect(cornerRadius: size * 0.32))
+        Group {
+            if let brandIcon {
+                Image(brandIcon).resizable().renderingMode(.original).scaledToFit().padding(size * 0.22)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+        }
+        .frame(width: size, height: size)
+        .glassEffect(.regular, in: .rect(cornerRadius: size * 0.32))
     }
 }
 

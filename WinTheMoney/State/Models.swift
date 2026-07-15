@@ -29,6 +29,15 @@ enum BudgetPeriod: String, Codable, CaseIterable, Identifiable {
     var noun: String { switch self { case .monthly: "month"; case .quarterly: "quarter"; case .annual: "year"; case .custom: "period" } }
 }
 
+/// Which budget bucket a category falls under — drives whether it counts toward the app's
+/// cross-category "total spend" figures (Investments never does; it has its own cap/progress
+/// bar but isn't spend).
+enum CategoryKind: String, Codable, CaseIterable, Identifiable {
+    case needs, wants, investments
+    var id: String { rawValue }
+    var label: String { switch self { case .needs: "Need"; case .wants: "Want"; case .investments: "Investment" } }
+}
+
 // MARK: - Category (budget)
 struct BudgetCategory: Identifiable, Codable, Hashable {
     var id = UUID()
@@ -41,6 +50,7 @@ struct BudgetCategory: Identifiable, Codable, Hashable {
     var period: BudgetPeriod = .monthly   // window the cap applies over
     var customMonths: Int = 1             // cycle length when period == .custom
     var anchor: Date? = nil               // cycle start (e.g. insurance renewal); nil → financial-year start
+    var kind: CategoryKind = .needs       // Need / Want / Investment facet
 
     /// Effective cycle length in months (≥ 1).
     var periodMonths: Int { period == .custom ? max(1, customMonths) : period.months }

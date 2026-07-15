@@ -55,4 +55,22 @@ enum NotificationManager {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: [cardDueId(mask, "t3"), cardDueId(mask, "due")])
     }
+
+    /// Fired once per Gmail scan when it queues one or more newly-locked statements (never on
+    /// app-launch rehydration of an already-persisted pending list — the caller only invokes this
+    /// for genuinely new appends). Not gated by the app's own "Monthly budget reminder" toggle,
+    /// matching `scheduleCardDue`'s pattern — self-gates via OS authorization.
+    static func notifyPendingStatements(total: Int) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Win the Money"
+            content.body = total == 1
+                ? "A locked statement needs its password — accounts may be missing transactions."
+                : "\(total) locked statements need a password — accounts may be missing transactions."
+            content.sound = .default
+            center.add(UNNotificationRequest(identifier: "wtm_pending_stmt_\(UUID().uuidString)", content: content, trigger: nil))
+        }
+    }
 }

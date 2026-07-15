@@ -163,7 +163,7 @@ struct TransactionsSheet: View {
 
     @ViewBuilder private func row(_ t: Txn, _ run: (value: Double, isCard: Bool, limit: Double)?) -> some View {
         HStack(spacing: 12) {
-            IconChip(symbol: t.symbol)
+            IconChip(symbol: t.symbol, brandIcon: BrandCatalog.icon(for: [t.merchant, t.counterparty ?? ""].joined(separator: " ")))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
                     if t.needsReview {
@@ -1533,6 +1533,7 @@ struct AddCategorySheet: View {
     @State private var symbol = "cart.fill"
     @State private var period: BudgetPeriod = .monthly
     @State private var customMonths = 6
+    @State private var kind: CategoryKind = .needs
     @State private var hasAnchor = false
     @State private var anchor = Store.financialYearStart()
     @State private var loaded = false
@@ -1555,6 +1556,14 @@ struct AddCategorySheet: View {
                     LabeledAmountField(label: budgetLabel, amount: $plan)
                 } footer: {
                     if isSystem { Text("This is a built-in category — its name can't be changed, but you can set its budget and icon.") }
+                }
+
+                Section {
+                    Picker("Type", selection: $kind) {
+                        ForEach(CategoryKind.allCases) { Text($0.label + "s").tag($0) }
+                    }
+                } footer: {
+                    Text("Investments are excluded from your overall spend totals, but still tracked here with their own budget and progress bar.")
                 }
 
                 Section {
@@ -1588,7 +1597,8 @@ struct AddCategorySheet: View {
                                                color: editing?.color ?? (colors.randomElement() ?? "6E9BD8"),
                                                isSystem: editing?.isSystem ?? false,
                                                period: period, customMonths: max(1, customMonths),
-                                               anchor: (period == .annual || period == .custom) && hasAnchor ? anchor : nil)
+                                               anchor: (period == .annual || period == .custom) && hasAnchor ? anchor : nil,
+                                               kind: kind)
                         if editing == nil { store.addCategory(c) } else { store.update(c) }
                         dismiss()
                     }.fontWeight(.semibold)
@@ -1597,7 +1607,7 @@ struct AddCategorySheet: View {
             .onAppear {
                 guard !loaded, let e = editing else { loaded = true; return }; loaded = true
                 name = e.name; plan = e.plan; symbol = e.symbol
-                period = e.period; customMonths = e.customMonths
+                period = e.period; customMonths = e.customMonths; kind = e.kind
                 if let a = e.anchor { anchor = a; hasAnchor = true }
             }
         }

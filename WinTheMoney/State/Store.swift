@@ -102,7 +102,8 @@ final class Store: ObservableObject {
 
     var spentTotal: Double { monthSpend(monthsAgo: 0) }
     /// Sum of caps normalised to per-month, so quarterly/annual caps fold into the monthly overview.
-    var planTotal: Double { categories.map(\.monthlyPlan).reduce(0,+) }
+    /// Excludes Investment-kind categories — they have their own cap/progress bar but aren't "spend".
+    var planTotal: Double { categories.filter { $0.kind != .investments }.map(\.monthlyPlan).reduce(0,+) }
     var planLeft: Double { planTotal - spentTotal }
     var planPct: Int { planTotal > 0 ? Int((spentTotal/planTotal*100).rounded()) : 0 }
     var top3: [BudgetCategory] { Array(categories.sorted { $0.spent > $1.spent }.prefix(3)) }
@@ -206,7 +207,7 @@ final class Store: ObservableObject {
     private func monthSpend(monthsAgo i: Int) -> Double {
         let cal = Calendar.current
         guard let d = cal.date(byAdding: .month, value: -i, to: Date()) else { return 0 }
-        return max(0, txns.filter { cal.isDate($0.date, equalTo: d, toGranularity: .month) }
+        return max(0, txns.filter { cal.isDate($0.date, equalTo: d, toGranularity: .month) && !investmentCategoryNames.contains($0.category) }
             .map(spendContribution).reduce(0, +))
     }
 
@@ -217,6 +218,9 @@ final class Store: ObservableObject {
         if t.isRefund { return -abs(t.amount) }   // refund credit nets against spend
         return 0
     }
+    /// Category names currently tagged Investment — excluded from cross-category "total spend"
+    /// figures (a category's own cap/spend stays correct regardless; see `spend(inCategory:)`).
+    private var investmentCategoryNames: Set<String> { Set(categories.filter { $0.kind == .investments }.map(\.name)) }
     // MARK: insights aggregations (exclude transfers; debit-only grouping)
     private func txnsInLast(months: Int) -> [Txn] {
         let cal = Calendar.current
@@ -331,9 +335,18 @@ final class Store: ObservableObject {
         max(0, txns.filter { $0.category == name && $0.date >= from && $0.date < to }
             .map(spendContribution).reduce(0, +))
     }
-    /// Net spend across all categories within an arbitrary [from, to) window.
+    /// Net spend across all categories within an arbitrary [from, to) window. Excludes Investment-kind
+    /// categories, matching `planTotal`/`spentTotal`.
     func totalSpend(from: Date, to: Date) -> Double {
-        max(0, txns.filter { $0.date >= from && $0.date < to }.map(spendContribution).reduce(0, +))
+        max(0, txns.filter { $0.date >= from && $0.date < to && !investmentCategoryNames.contains($0.category) }
+            .map(spendContribution).reduce(0, +))
+    }
+    /// Real income credited within [from, to) — read-only Plan-tab summary; income never becomes a
+    /// BudgetCategory since it has no cap/spent semantics. Filters on the literal category "Income"
+    /// (not the `income` boolean) so refund credits — netted into their original spend category by
+    /// `classify()` — can't double-count as income.
+    func totalIncome(from: Date, to: Date) -> Double {
+        txns.filter { $0.category == "Income" && $0.date >= from && $0.date < to }.map(\.amount).reduce(0, +)
     }
     var currentMonthName: String { Date().formatted(.dateTime.month(.wide)) }
     var daysLeftInMonth: Int {
@@ -1202,24 +1215,24 @@ final class Store: ObservableObject {
 
     // MARK: maintained base categories
     /// Canonical base taxonomy — always present, can't be deleted/renamed (budget + icon editable).
-    static let baseCategories: [(name: String, symbol: String, color: String)] = [
-        ("Eating out", "fork.knife", "6E9BD8"),
-        ("Online food delivery", "takeoutbag.and.cup.and.straw.fill", "7FC4A3"),
-        ("Groceries", "cart.fill", "5BA585"),
-        ("Transport", "car.fill", "4F7FC4"),
-        ("Travel", "airplane", "9AA7BE"),
-        ("Fuel", "fuelpump.fill", "6E9BD8"),
-        ("Shopping", "bag.fill", "7FC4A3"),
-        ("Subscriptions", "play.rectangle.fill", "5BA585"),
-        ("Entertainment", "popcorn.fill", "4F7FC4"),
-        ("Bills & Utilities", "bolt.fill", "9AA7BE"),
-        ("Insurance", "shield.lefthalf.filled", "6E9BD8"),
-        ("EMI & Loans", "banknote.fill", "7FC4A3"),
-        ("Health", "heart.fill", "5BA585"),
-        ("Education", "graduationcap.fill", "4F7FC4"),
-        ("Family", "person.2.fill", "9AA7BE"),
-        ("Investments", "chart.line.uptrend.xyaxis", "6E9BD8"),
-        ("Other", "circle.grid.2x2", "9AA7BE"),
+    static let baseCategories: [(name: String, symbol: String, color: String, kind: CategoryKind)] = [
+        ("Eating out", "fork.knife", "6E9BD8", .wants),
+        ("Online food delivery", "takeoutbag.and.cup.and.straw.fill", "7FC4A3", .wants),
+        ("Groceries", "cart.fill", "5BA585", .needs),
+        ("Transport", "car.fill", "4F7FC4", .needs),
+        ("Travel", "airplane", "9AA7BE", .wants),
+        ("Fuel", "fuelpump.fill", "6E9BD8", .needs),
+        ("Shopping", "bag.fill", "7FC4A3", .wants),
+        ("Subscriptions", "play.rectangle.fill", "5BA585", .wants),
+        ("Entertainment", "popcorn.fill", "4F7FC4", .wants),
+        ("Bills & Utilities", "bolt.fill", "9AA7BE", .needs),
+        ("Insurance", "shield.lefthalf.filled", "6E9BD8", .needs),
+        ("EMI & Loans", "banknote.fill", "7FC4A3", .needs),
+        ("Health", "heart.fill", "5BA585", .needs),
+        ("Education", "graduationcap.fill", "4F7FC4", .needs),
+        ("Family", "person.2.fill", "9AA7BE", .needs),
+        ("Investments", "chart.line.uptrend.xyaxis", "6E9BD8", .investments),
+        ("Other", "circle.grid.2x2", "9AA7BE", .wants),
     ]
     /// One-time rename of the old "Rent & Bills" category → "Bills & Utilities" (idempotent).
     func migrateRentBills() {
@@ -1255,7 +1268,7 @@ final class Store: ObservableObject {
             if let i = categories.firstIndex(where: { $0.name == b.name }) {
                 if !categories[i].isSystem { categories[i].isSystem = true }   // adopt existing same-named as the base
             } else {
-                categories.append(BudgetCategory(name: b.name, symbol: b.symbol, spent: 0, plan: 0, color: b.color, isSystem: true))
+                categories.append(BudgetCategory(name: b.name, symbol: b.symbol, spent: 0, plan: 0, color: b.color, isSystem: true, kind: b.kind))
             }
         }
     }
