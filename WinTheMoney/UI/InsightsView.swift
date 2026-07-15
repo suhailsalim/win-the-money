@@ -131,7 +131,8 @@ struct InsightsView: View {
             } else {
                 ForEach(Array(brands.enumerated()), id: \.offset) { _, b in
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack {
+                        HStack(spacing: 8) {
+                            IconChip(symbol: "circle.grid.2x2", brandIcon: BrandCatalog.icon(forBrand: b.brand), size: 26)
                             Text(b.brand).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink).lineLimit(1)
                             Spacer()
                             Text(INR.compact(b.amount)).font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)

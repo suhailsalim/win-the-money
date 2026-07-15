@@ -179,7 +179,7 @@ struct HomeView: View {
                     Text("of \(INR.compact(store.planTotal)) planned").font(.caption2).foregroundStyle(Zen.ink3)
                     ZenBar(value: store.planTotal > 0 ? store.spentTotal/store.planTotal : 0).padding(.top, 4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading).padding(16).zenCard(22, interactive: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(16).zenCard(22, interactive: true)
             }.buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -191,7 +191,7 @@ struct HomeView: View {
                 }
                 Text(store.streakMonths > 0 ? "Keep it calm" : "Stay on plan to build a streak").font(.caption2).foregroundStyle(Zen.ink3)
             }
-            .frame(maxWidth: .infinity, alignment: .leading).padding(16).zenCard(22)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(16).zenCard(22)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -220,7 +220,7 @@ struct HomeView: View {
         VStack(spacing: 0) {
             ForEach(store.recent) { t in
                 HStack(spacing: 12) {
-                    IconChip(symbol: t.symbol)
+                    IconChip(symbol: t.symbol, brandIcon: BrandCatalog.icon(for: [t.merchant, t.counterparty ?? ""].joined(separator: " ")))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(t.merchant).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
                         Text("\(t.category) · \(t.account)").font(.caption2).foregroundStyle(Zen.ink3)
@@ -270,9 +270,9 @@ struct CategoryRow: View {
     var body: some View {
         HStack(spacing: 12) {
             IconChip(symbol: c.symbol, size: compact ? 34 : 40, tint: Color(hex: c.color))
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
-                    Text(c.name).font(.subheadline.weight(compact ? .semibold : .bold)).foregroundStyle(Zen.ink)
+                    Text(c.name).font(.subheadline.weight(compact ? .semibold : .bold)).foregroundStyle(Zen.ink).lineLimit(1)
                     if spentOverride == nil, c.period != .monthly {
                         Text(c.period == .custom ? "\(c.periodMonths)mo" : c.period.label)
                             .font(.caption2.weight(.bold)).foregroundStyle(Zen.accentDeep)
@@ -280,22 +280,21 @@ struct CategoryRow: View {
                             .background(Capsule().fill(Zen.accent.opacity(0.16)))
                     }
                     Spacer()
-                    HStack(spacing: 3) {
-                        Text(INR.compact(spent)).foregroundStyle(Zen.ink2)
-                        Text("/ \(INR.compact(plan))").foregroundStyle(Zen.ink3)
-                    }.font(.caption.weight(.semibold))
                 }
                 ZenBar(value: pct, tint: AnyShapeStyle(Color(hex: barHex)))
-            }
-            if !compact {
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("\(Int(pct*100))%").font(.subheadline.weight(.bold)).foregroundStyle(Color(hex: barHex))
-                    let noun = periodNoun ?? (c.period == .monthly ? "" : c.period.noun)
-                    Text("\(INR.compact(abs(left))) \(over ? "over" : "left")\(noun.isEmpty ? "" : "/\(noun)")").font(.caption2).foregroundStyle(Zen.ink3)
-                }.frame(width: 64, alignment: .trailing)
+                HStack(spacing: 4) {
+                    Text(INR.compact(spent)).foregroundStyle(Zen.ink2)
+                    Text("/ \(INR.compact(plan))").foregroundStyle(Zen.ink3)
+                    if !compact {
+                        Spacer()
+                        Text("\(Int(pct*100))%").foregroundStyle(Color(hex: barHex)).fontWeight(.bold)
+                        let noun = periodNoun ?? (c.period == .monthly ? "" : c.period.noun)
+                        Text("· \(INR.compact(abs(left))) \(over ? "over" : "left")\(noun.isEmpty ? "" : "/\(noun)")").foregroundStyle(Zen.ink3)
+                    }
+                }.font(.caption.weight(.semibold))
             }
         }
-        .padding(.horizontal, 15).padding(.vertical, compact ? 13 : 14)
+        .padding(.horizontal, 12).padding(.vertical, compact ? 11 : 12)
         .zenCard(20, interactive: true)
     }
 }

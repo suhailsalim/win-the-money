@@ -99,6 +99,7 @@ final class GmailManager: NSObject, ObservableObject {
             let mails = try await GmailProvider.fetchStatements(accessToken: token, days: max(scanDays, 90))
             let vault = StatementVault.passwords()
             var imported = 0
+            let pendingCountBefore = pending.count
             for m in mails {
                 let key = "\(m.messageId):\(m.attachmentId)"
                 if processed.contains(key) || pending.contains(where: { $0.messageId == m.messageId && $0.attachmentId == m.attachmentId }) { continue }
@@ -119,6 +120,7 @@ final class GmailManager: NSObject, ObservableObject {
                 }
             }
             UserDefaults.standard.set(Date(), forKey: "gmail_stmt_last")
+            if pending.count > pendingCountBefore { NotificationManager.notifyPendingStatements(total: pending.count) }
             stmtPhase = .success(imported)
         } catch {
             stmtPhase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)

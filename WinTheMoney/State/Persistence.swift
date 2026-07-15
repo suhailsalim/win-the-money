@@ -26,7 +26,7 @@ extension KeyedDecodingContainer {
 
 // MARK: BudgetCategory
 extension BudgetCategory {
-    enum CodingKeys: String, CodingKey { case id, name, symbol, spent, plan, color, isSystem, period, customMonths, anchor }
+    enum CodingKeys: String, CodingKey { case id, name, symbol, spent, plan, color, isSystem, period, customMonths, anchor, kind }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.decode(.id, default: UUID())
@@ -39,6 +39,11 @@ extension BudgetCategory {
         period = BudgetPeriod(rawValue: c.decode(.period, default: "monthly")) ?? .monthly
         customMonths = c.decode(.customMonths, default: 1)
         anchor = c.decode(.anchor, default: nil)
+        // Migration: pre-existing rows have no `kind` key. Default by matching name against the
+        // canonical base taxonomy (so an existing "Investments" category lands on .investments,
+        // not .needs) rather than hardcoding the name a second time here.
+        kind = CategoryKind(rawValue: c.decode(.kind, default:
+            (Store.baseCategories.first { $0.name == name }?.kind ?? .needs).rawValue)) ?? .needs
     }
 }
 

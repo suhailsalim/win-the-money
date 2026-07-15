@@ -4,12 +4,14 @@ struct AccountsView: View {
     var embedded = false   // true when pushed from Settings (no Done button; uses the nav back)
     @EnvironmentObject var store: Store
     @EnvironmentObject var sync: SyncManager
+    @EnvironmentObject var gmail: GmailManager
     @Environment(\.dismiss) private var dismiss
     @State private var showDeposit = false
     @State private var showConnect = false
     @State private var showBank = false
     @State private var showCard = false
     @State private var showInvestment = false
+    @State private var showPending = false
     @State private var editingBank: BankAccount?
     @State private var editingCard: CreditCard?
     @State private var editingDeposit: Deposit?
@@ -41,6 +43,7 @@ struct AccountsView: View {
                 ZenBackground()
                 ScrollView {
                     VStack(spacing: 20) {
+                        if !gmail.pending.isEmpty { pendingBanner }
                         if aaEnabled, case .idle = sync.phase {} else if aaEnabled {
                             HStack { SyncStatus(phase: sync.phase); Spacer() }
                         }
@@ -86,9 +89,31 @@ struct AccountsView: View {
                 QuickAllocateSheet(kind: t.kind, assetId: t.assetId, assetName: t.name, assetValue: t.value)
             }
             .sheet(item: $drill) { d in TransactionsSheet(account: d.name) }
+            .sheet(isPresented: $showPending) { NavigationStack { StatementsEmailView() } }
     }
 
     private func refresh() { refreshing = true; Task { await store.refreshQuotes(); refreshing = false } }
+
+    // MARK: pending statements banner — same purpose as HomeView's, so a locked statement can't be
+    // missed here either (mirrors HomeView.pendingBanner, reuses the same StatementsEmailView).
+    private var pendingBanner: some View {
+        Button { showPending = true } label: {
+            HStack(spacing: 12) {
+                IconChip(symbol: "lock.doc", tint: Zen.caution)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(gmail.pending.count) statement\(gmail.pending.count == 1 ? "" : "s") need a password")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                    Text("Tap to unlock and import — your accounts won't show until then")
+                        .font(.caption2).foregroundStyle(Zen.ink2).lineLimit(2)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Zen.ink3)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .zenCard(tinted: Zen.caution, 20)
+        }.buttonStyle(.plain)
+    }
 
     /// Circular "view transactions" button shown next to each account.
     private func drillButton(_ name: String) -> some View {

@@ -28,26 +28,39 @@ struct PlanWindow {
 
 struct PlanView: View {
     @EnvironmentObject var store: Store
-    @State private var showAddCategory = false
-    @State private var editingCategory: BudgetCategory?
+    @State private var sheet: PlanSheet?
     @State private var mode: PlanPeriodMode = .monthly
     @State private var offset = 0              // 0 = current; +1 = one period back (months if monthly, else years)
-    @State private var drill: CatDrill?
 
-    struct CatDrill: Identifiable { let id = UUID(); let name: String }
+    /// Single sheet route for the screen — replaces three separate `@State` bools/optionals that
+    /// used to back three stacked `.sheet` modifiers (unreliable when more than one could be active
+    /// at once; this is also what caused the "view transactions" filter to sometimes show the wrong
+    /// sheet/content).
+    enum PlanSheet: Identifiable {
+        case add, edit(BudgetCategory), drill(String)
+        var id: String {
+            switch self {
+            case .add: return "add"
+            case .edit(let c): return "edit-\(c.id)"
+            case .drill(let name): return "drill-\(name)"
+            }
+        }
+    }
 
     private var window: PlanWindow { Self.window(mode: mode, offset: offset) }
     private func spent(_ c: BudgetCategory) -> Double { store.spend(inCategory: c.name, from: window.start, to: window.end) }
     private func plan(_ c: BudgetCategory) -> Double { c.monthlyPlan * Double(window.months) }
     private var periodSpent: Double { store.totalSpend(from: window.start, to: window.end) }
-    private var periodPlan: Double { store.categories.map(\.monthlyPlan).reduce(0, +) * Double(window.months) }
+    private var periodPlan: Double { store.categories.filter { $0.kind != .investments }.map(\.monthlyPlan).reduce(0, +) * Double(window.months) }
     private var periodLeft: Double { periodPlan - periodSpent }
     private var periodPct: Int { periodPlan > 0 ? Int((periodSpent / periodPlan * 100).rounded()) : 0 }
+    private var periodIncome: Double { store.totalIncome(from: window.start, to: window.end) }
 
     var body: some View {
         VStack(spacing: 20) {
             periodNav
             hero
+            if periodIncome > 0 || !store.incomeStreams.isEmpty { incomeSummary }
             if store.txns.contains(where: { !$0.income }) {
                 VStack(alignment: .leading, spacing: 11) {
                     SectionHeader(title: "Plan vs actual")
@@ -59,7 +72,7 @@ struct PlanView: View {
                 if store.categories.isEmpty {
                     EmptyState(icon: "chart.pie", title: "No budget categories",
                                message: "Add categories to plan your monthly spend.",
-                               actionTitle: "Add category") { showAddCategory = true }
+                               actionTitle: "Add category") { sheet = .add }
                 } else {
                     VStack(spacing: 9) {
                         ForEach(store.categories) { c in categoryRow(c) }
@@ -76,7 +89,7 @@ struct PlanView: View {
                         ForEach(PlanPeriodMode.allCases) { m in Text(m.full).tag(m) }
                     }
                     Divider()
-                    Button { showAddCategory = true } label: { Label("Add category", systemImage: "plus") }
+                    Button { sheet = .add } label: { Label("Add category", systemImage: "plus") }
                     Button {
                         if BudgetLiveActivity.isRunning { BudgetLiveActivity.stop() }
                         else { BudgetLiveActivity.start(month: store.currentMonthName, spent: store.spentTotal, plan: store.planTotal, daysLeft: store.daysLeftInMonth) }
@@ -87,10 +100,12 @@ struct PlanView: View {
             }
         }
         .onChange(of: mode) { _, _ in offset = 0 }
-        .sheet(isPresented: $showAddCategory) { AddCategorySheet() }
-        .sheet(item: $editingCategory) { AddCategorySheet(editing: $0) }
-        .sheet(item: $drill) { d in
-            TransactionsSheet(category: d.name)
+        .sheet(item: $sheet) { s in
+            switch s {
+            case .add: AddCategorySheet()
+            case .edit(let c): AddCategorySheet(editing: c)
+            case .drill(let name): TransactionsSheet(category: name)
+            }
         }
     }
 
@@ -140,6 +155,23 @@ struct PlanView: View {
         return "\(periodPct)% of budget used · \(window.months) month\(window.months == 1 ? "" : "s") · \(window.title)"
     }
 
+    // MARK: income summary — real credited income for the period, links to the Income tab
+    private var incomeSummary: some View {
+        Button { store.tab = .income } label: {
+            HStack(spacing: 10) {
+                IconChip(symbol: "indianrupeesign.circle.fill", size: 34, tint: Zen.greenDeep)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Income").font(.caption2.weight(.semibold)).foregroundStyle(Zen.ink2)
+                    Text(periodIncome > 0 ? "\(INR.compact(periodIncome)) credited" : "Not credited yet")
+                        .font(.subheadline.weight(.bold)).foregroundStyle(periodIncome > 0 ? Zen.ink : Zen.ink3)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Zen.ink3)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12).zenCard(18, interactive: true)
+        }.buttonStyle(.plain)
+    }
+
     private var barChart: some View {
         VStack(alignment: .leading, spacing: 12) {
             Chart(store.planMonths) { m in
@@ -166,18 +198,18 @@ struct PlanView: View {
 
     @ViewBuilder private func categoryRow(_ c: BudgetCategory) -> some View {
         HStack(spacing: 8) {
-            Button { editingCategory = c } label: {
+            Button { sheet = .drill(c.name) } label: {
                 CategoryRow(c: c, spentOverride: spent(c), planOverride: plan(c),
                             periodNoun: mode == .monthly ? nil : "period")
             }.buttonStyle(.plain)
-            Button { drill = .init(name: c.name) } label: {
-                Image(systemName: "list.bullet").font(.subheadline.weight(.semibold)).foregroundStyle(Zen.accentDeep)
-                    .frame(width: 42, height: 42).background(Circle().fill(Zen.accent.opacity(0.14)))
-            }.buttonStyle(.plain).accessibilityLabel("View \(c.name) transactions")
+            Button { sheet = .edit(c) } label: {
+                Image(systemName: "pencil").font(.subheadline.weight(.semibold)).foregroundStyle(Zen.accentDeep)
+                    .frame(width: 36, height: 36).background(Circle().fill(Zen.accent.opacity(0.14)))
+            }.buttonStyle(.plain).accessibilityLabel("Edit \(c.name)")
         }
         .contextMenu {
-            Button { editingCategory = c } label: { Label("Edit", systemImage: "pencil") }
-            Button { drill = .init(name: c.name) } label: { Label("View transactions", systemImage: "list.bullet") }
+            Button { sheet = .edit(c) } label: { Label("Edit", systemImage: "pencil") }
+            Button { sheet = .drill(c.name) } label: { Label("View transactions", systemImage: "list.bullet") }
             Button(role: .destructive) { store.remove(category: c) } label: { Label("Delete", systemImage: "trash") }
         }
     }

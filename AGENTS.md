@@ -97,7 +97,14 @@ gitignored), `.claude/skills/` (committed agent skills).
 
 - Never commit secrets. `Info.plist` ships a `YOUR_GOOGLE_OAUTH_CLIENT_ID` placeholder; real ids/secrets
   live in the Keychain (or a `skip-worktree` local `Info.plist`).
-- Use bank/card/merchant names only for **factual identification**; bundle no issuer artwork.
+- Use bank/card/merchant names only for **factual identification**. Deliberate exception (2026-07-14):
+  small CC0-licensed vector *merchant* marks from [Simple Icons](https://github.com/simple-icons/simple-icons)
+  are bundled for common-brand icons (`Assets.xcassets/brand_*.imageset`, wired via `BrandCatalog.icon`) —
+  the user explicitly chose this after being shown the trademark/App-Store-review tradeoff. This app ships
+  only via the free personal Apple developer team (`WNU93FA79R`), i.e. **not App-Store-distributed**, which
+  materially lowers the real-world risk and was the basis for the exception. Do not extend this to bank/card
+  **issuer** artwork (logos, hologram art, card face designs) without a fresh explicit decision — the
+  exception is scoped to merchant/brand marks only.
 
 ## OpenWolf
 
