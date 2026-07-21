@@ -59,15 +59,66 @@ final class Store: ObservableObject {
     }
 
     /// Write a backup now (Files + iCloud Drive when available). Returns where it landed.
+    /// A manual backup is never blocked by the shrink gate — the user asked for it — but it says so.
     @discardableResult
-    func backupNow() -> String { BackupManager.write(exportBundle()) }
-    /// Called when the app backgrounds.
-    func autoBackupIfEnabled() { if autoBackupEnabled, hasData { _ = backupNow() } }
+    func backupNow() -> String {
+        let shrinking = backupWouldShrink()
+        let where_ = BackupManager.write(exportBundle())
+        guard shrinking, where_ != "—" else { return where_ }
+        return "\(where_) — warning: far fewer transactions than the last backup"
+    }
+
+    /// The auto-backup safety gate. The rule is deliberately dumb and transparent: if the previous
+    /// backup held more than 20 transactions and we're about to write fewer than 25% of that, the
+    /// live store has almost certainly been wiped or failed to decode — keep the old backups.
+    /// Returns false when there's no previous backup to compare against.
+    func backupWouldShrink() -> Bool {
+        guard let old = BackupManager.latestData(), let s = previewBackup(old) else { return false }
+        return s.txns > 20 && Double(txns.count) < Double(s.txns) * 0.25
+    }
+
+    /// Called on launch and when the app backgrounds.
+    func autoBackupIfEnabled() {
+        guard autoBackupEnabled, hasData, !backupWouldShrink() else { return }
+        _ = backupNow()
+    }
+
     /// Restore the most recent auto-backup; returns success.
     @discardableResult
     func restoreLatestBackup() -> Bool {
         guard let data = BackupManager.latestData() else { return false }
+        return restore(data)
+    }
+
+    /// Restore one specific backup file from the rotation.
+    @discardableResult
+    func restoreBackup(_ info: BackupManager.BackupInfo) -> Bool {
+        guard let data = BackupManager.data(at: info.url) else { return false }
+        return restore(data)
+    }
+
+    /// Shared restore path: snapshot the state we're about to destroy first, then replace.
+    private func restore(_ data: Data) -> Bool {
+        if hasData { BackupManager.write(exportBundle(), preRestore: true) }
         return importBundle(data, replace: true)
+    }
+
+    /// What a backup file holds, for the restore preview. nil when the file doesn't decode.
+    struct BackupSummary {
+        var exportedAt: Date
+        var txns = 0, banks = 0, cards = 0, deposits = 0, goals = 0, investments = 0
+        var firstTxn: Date?
+        var lastTxn: Date?
+    }
+
+    /// Decodes through the same tolerant `BackupBundle` path `importBundle` uses — never a second decoder.
+    func previewBackup(_ data: Data) -> BackupSummary? {
+        guard let b = try? Self.backupCoder.1.decode(BackupBundle.self, from: data) else { return nil }
+        let p = b.data
+        let dates = p.txns.map(\.date).sorted()
+        return BackupSummary(exportedAt: b.exportedAt, txns: p.txns.count, banks: p.banks.count,
+                             cards: p.cards.count, deposits: p.deposits.count, goals: p.goals.count,
+                             investments: p.investments.count, firstTxn: dates.first, lastTxn: dates.last)
     }
 
     var targetLabel: String { INR.compact(netWorthTarget) }
@@ -1363,6 +1414,9 @@ final class Store: ObservableObject {
         userName = b.userName
         netWorthTarget = b.netWorthTarget > 0 ? b.netWorthTarget : netWorthTarget
         preferStatementImport = b.preferStatementImport
+        // Swapping the txn set invalidates every derived total; this also cascades to anchored
+        // bank balances and asset-backed goal progress. Idempotent on a self-consistent bundle.
+        recomputeSpent()
         save()
         return true
     }

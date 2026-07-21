@@ -15,12 +15,9 @@ no longer match this list.
    was written to land already shipped in #14, so step 1 is done — this is now the harness + assertions
    only. Note the four fixture PDFs are gitignored, so they exist only in the main working copy, not in
    worktrees.
-2. [PLAN-backup-rotation-and-safety.md](PLAN-backup-rotation-and-safety.md) — rotating backups,
-   overwrite sanity gate, restore preview. `BackupManager` still writes a single fixed
-   `WinTheMoney-backup.json`; no rotation exists.
-3. [PLAN-plan-period-cap-snapshots.md](PLAN-plan-period-cap-snapshots.md) — truthful historical
+2. [PLAN-plan-period-cap-snapshots.md](PLAN-plan-period-cap-snapshots.md) — truthful historical
    budget caps.
-4. [PLAN-axis-scapia-per-txn-rewards.md](PLAN-axis-scapia-per-txn-rewards.md) — EDGE Miles per-txn
+3. [PLAN-axis-scapia-per-txn-rewards.md](PLAN-axis-scapia-per-txn-rewards.md) — EDGE Miles per-txn
    parsing (needs #1). Still open despite #11/#12: `parseHDFC` and `parseICICI` emit per-row rewards,
    but `parseAxis`/`parseScapia` capture only the *account-level* balance via `cardAccount(reward:)`.
    #12 did Axis MCC + forex, not rewards.
@@ -50,6 +47,9 @@ no longer match this list.
 
 ## Shipped
 
+- [PLAN-backup-rotation-and-safety.md](PLAN-backup-rotation-and-safety.md) — rotating timestamped
+  backups (newest 10 per location), auto-backup shrink gate, restore preview + per-backup restore.
+  Rotation/pruning verified by a sandboxed swiftc harness, not just a compile.
 - [PLAN-app-lock.md](PLAN-app-lock.md) — Face ID lock + app-switcher privacy cover (#16).
 - [PLAN-card-due-reminders.md](PLAN-card-due-reminders.md) — card due dates + T-3/due-day reminders (#17).
 - [PLAN-pending-statement-surfacing.md](PLAN-pending-statement-surfacing.md) — Home + Accounts banners,

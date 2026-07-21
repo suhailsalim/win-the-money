@@ -1188,6 +1188,7 @@ struct SettingsSheet: View {
             Toggle(isOn: $store.autoBackupEnabled) { Label("Auto-backup", systemImage: "clock.arrow.circlepath") }
             Button { message = "Backed up to \(store.backupNow())" } label: { Label("Back up now", systemImage: "icloud.and.arrow.up") }
             Button { message = store.restoreLatestBackup() ? "Restored latest backup" : "No backup found yet" } label: { Label("Restore latest backup", systemImage: "icloud.and.arrow.down") }
+            NavigationLink { BackupsView() } label: { Label("Backups", systemImage: "clock.badge.checkmark") }
         } header: { Text("Automatic backup") } footer: {
             Text(backupFooter)
         }
@@ -1234,6 +1235,117 @@ struct SettingsSheet: View {
         defer { if ok { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url) else { message = "Couldn't read that file"; return }
         message = store.importBundle(data, replace: replace) ? "Backup imported" : "That file isn't a valid backup"
+    }
+}
+
+// MARK: - Rotating backups: browse, preview contents, restore one
+struct BackupsView: View {
+    @EnvironmentObject var store: Store
+    @State private var items: [BackupManager.BackupInfo] = []
+    @State private var selected: BackupManager.BackupInfo?
+
+    var body: some View {
+        List {
+            if items.isEmpty {
+                Text("No backups yet.").foregroundStyle(Zen.ink3)
+            }
+            ForEach(items) { info in
+                Button { selected = info } label: { row(info) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .zenForm()
+        .navigationTitle("Backups")
+        .onAppear { items = BackupManager.list() }
+        .sheet(item: $selected) { info in
+            BackupPreviewSheet(info: info) { items = BackupManager.list() }
+        }
+    }
+
+    private func row(_ info: BackupManager.BackupInfo) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(info.date.formatted(date: .abbreviated, time: .shortened))
+                HStack(spacing: 6) {
+                    Text(info.source.rawValue)
+                    if info.isStable { Text("· Latest") }
+                    if info.isPreRestore { Text("· Before restore") }
+                }
+                .font(.caption).foregroundStyle(Zen.ink3)
+            }
+            Spacer()
+            Text(ByteCountFormatter.string(fromByteCount: Int64(info.byteSize), countStyle: .file))
+                .font(.caption).foregroundStyle(Zen.ink3)
+        }
+    }
+}
+
+/// Shows what a backup actually contains next to the live data, before replacing anything.
+struct BackupPreviewSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    let info: BackupManager.BackupInfo
+    var onRestore: () -> Void
+    @State private var summary: Store.BackupSummary?
+    @State private var loaded = false
+    @State private var confirm = false
+    @State private var message: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let s = summary {
+                    Section("This backup") {
+                        compare("Transactions", s.txns, store.txns.count)
+                        compare("Bank accounts", s.banks, store.banks.count)
+                        compare("Cards", s.cards, store.cards.count)
+                        compare("Deposits", s.deposits, store.deposits.count)
+                        compare("Goals", s.goals, store.goals.count)
+                        compare("Investments", s.investments, store.investments.count)
+                    }
+                    if let f = s.firstTxn, let l = s.lastTxn {
+                        Section("Transaction dates") {
+                            Text("\(f.formatted(date: .abbreviated, time: .omitted)) — \(l.formatted(date: .abbreviated, time: .omitted))")
+                        }
+                    }
+                    Section {
+                        Button(role: .destructive) { confirm = true } label: {
+                            Label("Restore this backup", systemImage: "arrow.counterclockwise")
+                        }
+                    } footer: {
+                        Text("Replaces all current data with this backup. A snapshot of your current data is saved first, labelled “Before restore”.")
+                    }
+                } else if loaded {
+                    Section { Text("This file is corrupt and can't be restored.").foregroundStyle(Zen.caution) }
+                } else {
+                    Section { Text("Reading…").foregroundStyle(Zen.ink3) }
+                }
+                if let message { Text(message).font(.caption).foregroundStyle(Zen.greenDeep) }
+            }
+            .zenForm()
+            .navigationTitle(info.date.formatted(date: .abbreviated, time: .shortened))
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .task {
+                summary = BackupManager.data(at: info.url).flatMap { store.previewBackup($0) }
+                loaded = true
+            }
+            .confirmationDialog("Restore this backup?", isPresented: $confirm, titleVisibility: .visible) {
+                Button("Replace all data", role: .destructive) {
+                    if store.restoreBackup(info) { onRestore(); dismiss() }
+                    else { message = "Couldn't read that backup" }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("Your current data will be replaced by this backup.") }
+        }
+    }
+
+    private func compare(_ label: String, _ backup: Int, _ live: Int) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text("\(backup)")
+            Text("now \(live)").font(.caption).foregroundStyle(Zen.ink3)
+        }
     }
 }
 
