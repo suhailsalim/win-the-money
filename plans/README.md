@@ -22,22 +22,23 @@ no longer match this list.
 
 ## Missing features (ranked)
 
-1. [PLAN-subscription-reminders.md](PLAN-subscription-reminders.md) — recurring-charge prediction.
-   Partly there: `Store.recurringGroups` already groups recurring transfers; prediction + reminders
-   are missing.
-2. [PLAN-cashflow-forecast.md](PLAN-cashflow-forecast.md) — safe-to-spend projection. Needs #1 above;
-   its other dependency (card due dates) shipped in #17.
-3. [PLAN-loans-emi-tracking.md](PLAN-loans-emi-tracking.md) — loans as liabilities
-4. [PLAN-monthly-report.md](PLAN-monthly-report.md) — shareable month-in-review
-5. [PLAN-app-intents-quick-log.md](PLAN-app-intents-quick-log.md) — Siri/Shortcuts quick logging
-6. [PLAN-cloudkit-sync.md](PLAN-cloudkit-sync.md) — multi-device sync (needs paid dev team; do last)
+1. [PLAN-loans-emi-tracking.md](PLAN-loans-emi-tracking.md) — loans as liabilities
+2. [PLAN-monthly-report.md](PLAN-monthly-report.md) — shareable month-in-review
+3. [PLAN-app-intents-quick-log.md](PLAN-app-intents-quick-log.md) — Siri/Shortcuts quick logging
+4. [PLAN-cloudkit-sync.md](PLAN-cloudkit-sync.md) — multi-device sync (needs paid dev team; do last)
 
 ## Web
 
-- [PLAN-website.md](PLAN-website.md) — GitHub Pages landing + hosted MkDocs docs. `mkdocs.yml` exists,
-  but `.github/` holds only a PR template, so nothing publishes yet.
+- [PLAN-website.md](PLAN-website.md) — landing page + `.github/workflows/site.yml` are committed,
+  but **not published**: Pages must be switched to "Source: GitHub Actions" in repo Settings by hand,
+  and the workflow only runs on `main`. Screenshots are placeholders, not real captures.
 
 ## Shipped
+
+- [PLAN-cashflow-forecast.md](PLAN-cashflow-forecast.md) — pure `CashflowForecast` (injected date),
+  safe-to-spend headline, 30-day sparkline, reconciling breakdown sheet.
+- [PLAN-subscription-reminders.md](PLAN-subscription-reminders.md) — cadence inference, next-charge
+  prediction, fixed-vs-variable burn split, muting, T-1 reminders.
 
 - [PLAN-global-search.md](PLAN-global-search.md) — `.searchable` transaction search over merchant,
   UPI payee, category, account, tags and bare amounts, composing with drill-in presets.

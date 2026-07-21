@@ -14,6 +14,7 @@ struct HomeView: View {
             if !dueCards.isEmpty { cardDueBanner }
             hero
             statRow
+            if !store.banks.isEmpty { ForecastCard() }
 
             let upcoming = store.upcomingCharges(within: 7)
             if !upcoming.isEmpty {

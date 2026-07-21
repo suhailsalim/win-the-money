@@ -482,6 +482,62 @@ final class Store: ObservableObject {
         return xs.filter { txnMatches($0, words: words) }
     }
 
+    // MARK: - Cash-flow forecast
+    /// Assembles live state into `CashflowForecast.Inputs`. All the judgement lives here; the maths
+    /// lives in the pure `CashflowForecast`.
+    func forecastInputs(today: Date = Date(), horizon: Int = 30) -> CashflowForecast.Inputs {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: today)
+        let end = cal.date(byAdding: .day, value: horizon, to: start) ?? start
+        var i = CashflowForecast.Inputs()
+        // Liquid only — deposits and investments aren't spendable this month.
+        i.startingBalance = banks.map(\.balance).reduce(0, +)
+
+        // Income: project each monthly stream on its credit day. A stream already credited this month
+        // (matching Income txn on/after its credit day) contributes nothing further; a stream whose day
+        // has passed with no matching txn is still projected, flagged as late rather than dropped.
+        let monthStart = cal.dateInterval(of: .month, for: start)?.start ?? start
+        for s in incomeStreams {
+            guard let day = s.creditDay, s.perPeriodAmount > 0 else { continue }
+            let amount = s.monthly ? s.perPeriodAmount : s.perPeriodAmount / 12
+            for m in 0...(horizon / 28 + 1) {
+                guard let base = cal.date(byAdding: .month, value: m, to: monthStart),
+                      let due = cal.date(bySetting: .day, value: min(day, cal.range(of: .day, in: .month, for: base)?.count ?? day), of: base)
+                else { continue }
+                guard due >= start, due <= end else { continue }
+                let alreadyPaid = txns.contains {
+                    $0.category == "Income" && $0.amount > 0
+                        && cal.isDate($0.date, equalTo: due, toGranularity: .month)
+                        && $0.date >= cal.date(byAdding: .day, value: -3, to: due)!
+                }
+                if alreadyPaid { continue }
+                i.income.append(.init(label: s.name, date: due, amount: amount,
+                                      expectedLate: due < start))
+            }
+        }
+
+        // Cash outflows: predicted recurring charges (subscriptions AND transfers/SIPs — a SIP is a
+        // real cash outflow even though it isn't spend) plus card bills falling due in the horizon.
+        for g in upcomingCharges(within: horizon) {
+            guard let d = g.nextDate else { continue }
+            i.bills.append(.init(label: g.name, date: d, amount: -g.expectedAmount))
+        }
+        for c in cards {
+            guard let due = c.dueDate, due >= start, due <= end else { continue }
+            let amount = c.totalDue ?? c.outstanding
+            guard amount > 0 else { continue }
+            // A card bill is cash out, never budget spend — the purchases behind it were already
+            // counted against categories when they happened.
+            i.bills.append(.init(label: "\(c.name) bill", date: due, amount: -amount))
+        }
+
+        i.remainingBudget = categories.filter { $0.kind != .investments }
+            .map { max(0, $0.monthlyPlan - $0.spent) }.reduce(0, +)
+        return i
+    }
+
+    var forecast: CashflowForecast { CashflowForecast.compute(forecastInputs(), today: Date()) }
+
     /// Net spend for one category within an arbitrary [from, to) window (for Plan period/month views).
     func spend(inCategory name: String, from: Date, to: Date) -> Double {
         max(0, txns.filter { $0.category == name && $0.date >= from && $0.date < to }
