@@ -31,10 +31,12 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 - **`Store` (`WinTheMoney/State/Store.swift`) is the single source of truth** — an `ObservableObject` holding
   every `@Published` collection and all derived totals + mutations. Views are thin and read/write `Store`.
   Published state: `categories, txns, banks, cards, deposits, goals, milestones, badges, investments,`
-  `incomeStreams, merchantRules, fxRates, nwHistory`, plus settings/profile fields.
+  `incomeStreams, loans, merchantRules, fxRates, nwHistory`, plus settings/profile fields. The loans
+  surface (net worth, EMI linking) lives in `Store+Loans.swift`; its amortisation maths is the pure,
+  `Date()`-free `LoanMath.swift`.
 - **Models** (`WinTheMoney/State/Models.swift`): `BudgetCategory, Txn, TxnSource, BankAccount, CreditCard,`
-  `Deposit, InvestmentKind, Investment, Goal/GoalStatus, Milestone, Badge, IncomeStream, PlanMonth,`
-  `Segment, Tab, Currencies`. Plain `Codable` structs.
+  `Deposit, InvestmentKind, Investment, Goal/GoalStatus, Loan/LoanAdjustment, Milestone, Badge,`
+  `IncomeStream, PlanMonth, Segment, Tab, Currencies`. Plain `Codable` structs.
 - **Persistence** (`WinTheMoney/State/Persistence.swift`): one `Persist` blob in UserDefaults; **tolerant**
   custom `init(from:)` per model. **RULE:** new stored properties must decode with a default — never
   let decoding throw. See the file header and [`docs/persistence-and-backup.md`](docs/persistence-and-backup.md).
