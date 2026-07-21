@@ -52,8 +52,9 @@ no longer match this list.
   Rotation/pruning verified by a sandboxed swiftc harness, not just a compile.
 - [PLAN-app-lock.md](PLAN-app-lock.md) — Face ID lock + app-switcher privacy cover (#16).
 - [PLAN-card-due-reminders.md](PLAN-card-due-reminders.md) — card due dates + T-3/due-day reminders (#17).
-- [PLAN-pending-statement-surfacing.md](PLAN-pending-statement-surfacing.md) — Home + Accounts banners,
-  reusing `StatementsEmailView` (#18). **One leftover:** `GmailManager.addPending` posts no local
-  notification, so the plan's "exactly one local notification on a new pending item" criterion is unmet.
+- [PLAN-pending-statement-surfacing.md](PLAN-pending-statement-surfacing.md) — Home + Accounts banners
+  reusing `StatementsEmailView`, plus the local notification (#18). Fully shipped: the notification
+  fires from the scan loop ([GmailManager.swift:123](../WinTheMoney/Gmail/GmailManager.swift)) when the
+  pending count grows, so it's one per scan and never fires on launch rehydration.
 </content>
 </invoke>
