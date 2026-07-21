@@ -14,3 +14,4 @@ Per-area documentation. Start with [`../AGENTS.md`](../AGENTS.md) for build/arch
 | [goals-income-tax.md](goals-income-tax.md) | Goals, income streams, tax estimate, net worth |
 | [gamification.md](gamification.md) | XP, levels, badges, milestones |
 | [integrations.md](integrations.md) | Gmail OAuth, Setu Account Aggregator, FX, notifications, widgets, background |
+| [siri-and-shortcuts.md](siri-and-shortcuts.md) | App Intents quick log, shared inbox, interactive widget |

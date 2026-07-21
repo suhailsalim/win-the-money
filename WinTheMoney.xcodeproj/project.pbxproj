@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		C2000000000000000000C201 /* SharedSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000C210 /* SharedSnapshot.swift */; };
 		C2000000000000000000C202 /* SharedSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000C210 /* SharedSnapshot.swift */; };
+		C2000000000000000000C203 /* QuickLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000C212 /* QuickLog.swift */; };
+		C2000000000000000000C204 /* QuickLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000C212 /* QuickLog.swift */; };
 		C2000000000000000000C251 /* WinTheMoneyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C2000000000000000000C230 /* WinTheMoneyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -39,6 +41,7 @@
 /* Begin PBXFileReference section */
 		B1000000000000000000000E /* WinTheMoney.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WinTheMoney.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C2000000000000000000C210 /* SharedSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSnapshot.swift; sourceTree = "<group>"; };
+		C2000000000000000000C212 /* QuickLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLog.swift; sourceTree = "<group>"; };
 		C2000000000000000000C230 /* WinTheMoneyWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WinTheMoneyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -88,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				C2000000000000000000C210 /* SharedSnapshot.swift */,
+				C2000000000000000000C212 /* QuickLog.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -202,6 +206,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C2000000000000000000C201 /* SharedSnapshot.swift in Sources */,
+				C2000000000000000000C203 /* QuickLog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -210,6 +215,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C2000000000000000000C202 /* SharedSnapshot.swift in Sources */,
+				C2000000000000000000C204 /* QuickLog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -14,12 +14,14 @@ struct BackupFile: FileDocument {
     init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
+/// Carries `Data`, not `String` — the CSV ships a UTF-8 BOM and re-encoding through a String
+/// would strip it, which is exactly what makes ₹ mojibake in Excel.
 struct CSVFile: FileDocument {
     static var readableContentTypes: [UTType] { [.commaSeparatedText, .plainText] }
-    var text: String
-    init(_ t: String) { text = t }
-    init(configuration: ReadConfiguration) throws { text = String(data: configuration.file.regularFileContents ?? Data(), encoding: .utf8) ?? "" }
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: Data(text.utf8)) }
+    var data: Data
+    init(_ d: Data) { data = d }
+    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 
 private func stamp() -> String {
@@ -66,6 +68,9 @@ struct TransactionsSheet: View {
     @State private var toDate = Date()
     @State private var tag: String? = nil
     @State private var hideTransfers = false
+    @State private var exportCSV = false
+    @State private var exportJSON = false
+    @State private var query = ""
 
     /// Default presentation, or pre-filtered for a drill-in (a category, account, or tag).
     init(account: String? = nil, category: String? = nil, tag: String? = nil) {
@@ -93,6 +98,10 @@ struct TransactionsSheet: View {
 
     private var filtered: [Txn] {
         var xs = store.txns
+        // Search narrows *within* whatever preset the drill-in supplied, so it composes with it
+        // rather than replacing it.
+        let words = Store.searchWords(query)
+        if !words.isEmpty { xs = xs.filter { store.txnMatches($0, words: words) } }
         if let a = account { xs = xs.filter { $0.account == a } }
         if let c = category { xs = xs.filter { $0.category == c } }
         if let tg = tag { xs = xs.filter { $0.tags.contains(tg) } }
@@ -149,8 +158,23 @@ struct TransactionsSheet: View {
                         Image(systemName: activeCount > 0 ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Exports exactly what's on screen — the active filters, in the chosen sort order.
+                    Menu {
+                        Button { exportCSV = true } label: { Label("Export as CSV", systemImage: "tablecells") }
+                        Button { exportJSON = true } label: { Label("Export as JSON", systemImage: "curlybraces") }
+                    } label: { Image(systemName: "square.and.arrow.up") }
+                }
                 ToolbarItem(placement: .topBarTrailing) { Button { showLog = true } label: { Image(systemName: "plus") } }
             }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Merchant, payee, tag or amount")
+            .fileExporter(isPresented: $exportCSV, document: CSVFile(TxnExporter.csv(filtered)),
+                          contentType: .commaSeparatedText,
+                          defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in }
+            .fileExporter(isPresented: $exportJSON, document: BackupFile(TxnExporter.json(filtered)),
+                          contentType: .json,
+                          defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in }
             .sheet(isPresented: $showLog) { LogTxnSheet() }
             .sheet(item: $editing) { LogTxnSheet(editing: $0) }
             .sheet(isPresented: $showFilters) {
@@ -1040,6 +1064,7 @@ struct SettingsSheet: View {
     @State private var lockError: String?
     @State private var showExportJSON = false
     @State private var showExportCSV = false
+    @State private var showExportTxnJSON = false
     @State private var showImport = false
     @State private var showImportChoice = false
     @State private var pendingImportURL: URL?
@@ -1054,6 +1079,7 @@ struct SettingsSheet: View {
                 profileSection
                 connectionsSection
                 securitySection
+                SiriSettingsSection()
                 notificationsSection
                 backupSection
                 dataSection
@@ -1071,8 +1097,10 @@ struct SettingsSheet: View {
                 }
                 clearAfterExport = false
             }
-            .fileExporter(isPresented: $showExportCSV, document: CSVFile(store.transactionsCSV()),
+            .fileExporter(isPresented: $showExportCSV, document: CSVFile(TxnExporter.csv(store.txns)),
                           contentType: .commaSeparatedText, defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in message = "CSV exported" }
+            .fileExporter(isPresented: $showExportTxnJSON, document: BackupFile(TxnExporter.json(store.txns)),
+                          contentType: .json, defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in message = "Transactions JSON exported" }
             .fileImporter(isPresented: $showImport, allowedContentTypes: [.json]) { result in
                 if case .success(let url) = result { pendingImportURL = url; showImportChoice = true }
             }
@@ -1188,6 +1216,7 @@ struct SettingsSheet: View {
             Toggle(isOn: $store.autoBackupEnabled) { Label("Auto-backup", systemImage: "clock.arrow.circlepath") }
             Button { message = "Backed up to \(store.backupNow())" } label: { Label("Back up now", systemImage: "icloud.and.arrow.up") }
             Button { message = store.restoreLatestBackup() ? "Restored latest backup" : "No backup found yet" } label: { Label("Restore latest backup", systemImage: "icloud.and.arrow.down") }
+            NavigationLink { BackupsView() } label: { Label("Backups", systemImage: "clock.badge.checkmark") }
         } header: { Text("Automatic backup") } footer: {
             Text(backupFooter)
         }
@@ -1206,6 +1235,7 @@ struct SettingsSheet: View {
             Button { showExportJSON = true } label: { Label("Export backup (JSON)", systemImage: "square.and.arrow.up") }
             Button { showImport = true } label: { Label("Import backup (JSON)", systemImage: "square.and.arrow.down") }
             Button { showExportCSV = true } label: { Label("Export transactions (CSV)", systemImage: "tablecells") }
+            Button { showExportTxnJSON = true } label: { Label("Export transactions (JSON)", systemImage: "curlybraces") }
             if let message { Text(message).font(.caption).foregroundStyle(Zen.greenDeep) }
         } header: { Text("Manual export / import") } footer: {
             Text("Export everything to a file you choose (e.g. iCloud Drive), then import it on a new device. Secrets (API keys) are not included.")
@@ -1234,6 +1264,117 @@ struct SettingsSheet: View {
         defer { if ok { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url) else { message = "Couldn't read that file"; return }
         message = store.importBundle(data, replace: replace) ? "Backup imported" : "That file isn't a valid backup"
+    }
+}
+
+// MARK: - Rotating backups: browse, preview contents, restore one
+struct BackupsView: View {
+    @EnvironmentObject var store: Store
+    @State private var items: [BackupManager.BackupInfo] = []
+    @State private var selected: BackupManager.BackupInfo?
+
+    var body: some View {
+        List {
+            if items.isEmpty {
+                Text("No backups yet.").foregroundStyle(Zen.ink3)
+            }
+            ForEach(items) { info in
+                Button { selected = info } label: { row(info) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .zenForm()
+        .navigationTitle("Backups")
+        .onAppear { items = BackupManager.list() }
+        .sheet(item: $selected) { info in
+            BackupPreviewSheet(info: info) { items = BackupManager.list() }
+        }
+    }
+
+    private func row(_ info: BackupManager.BackupInfo) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(info.date.formatted(date: .abbreviated, time: .shortened))
+                HStack(spacing: 6) {
+                    Text(info.source.rawValue)
+                    if info.isStable { Text("· Latest") }
+                    if info.isPreRestore { Text("· Before restore") }
+                }
+                .font(.caption).foregroundStyle(Zen.ink3)
+            }
+            Spacer()
+            Text(ByteCountFormatter.string(fromByteCount: Int64(info.byteSize), countStyle: .file))
+                .font(.caption).foregroundStyle(Zen.ink3)
+        }
+    }
+}
+
+/// Shows what a backup actually contains next to the live data, before replacing anything.
+struct BackupPreviewSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    let info: BackupManager.BackupInfo
+    var onRestore: () -> Void
+    @State private var summary: Store.BackupSummary?
+    @State private var loaded = false
+    @State private var confirm = false
+    @State private var message: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let s = summary {
+                    Section("This backup") {
+                        compare("Transactions", s.txns, store.txns.count)
+                        compare("Bank accounts", s.banks, store.banks.count)
+                        compare("Cards", s.cards, store.cards.count)
+                        compare("Deposits", s.deposits, store.deposits.count)
+                        compare("Goals", s.goals, store.goals.count)
+                        compare("Investments", s.investments, store.investments.count)
+                    }
+                    if let f = s.firstTxn, let l = s.lastTxn {
+                        Section("Transaction dates") {
+                            Text("\(f.formatted(date: .abbreviated, time: .omitted)) — \(l.formatted(date: .abbreviated, time: .omitted))")
+                        }
+                    }
+                    Section {
+                        Button(role: .destructive) { confirm = true } label: {
+                            Label("Restore this backup", systemImage: "arrow.counterclockwise")
+                        }
+                    } footer: {
+                        Text("Replaces all current data with this backup. A snapshot of your current data is saved first, labelled “Before restore”.")
+                    }
+                } else if loaded {
+                    Section { Text("This file is corrupt and can't be restored.").foregroundStyle(Zen.caution) }
+                } else {
+                    Section { Text("Reading…").foregroundStyle(Zen.ink3) }
+                }
+                if let message { Text(message).font(.caption).foregroundStyle(Zen.greenDeep) }
+            }
+            .zenForm()
+            .navigationTitle(info.date.formatted(date: .abbreviated, time: .shortened))
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .task {
+                summary = BackupManager.data(at: info.url).flatMap { store.previewBackup($0) }
+                loaded = true
+            }
+            .confirmationDialog("Restore this backup?", isPresented: $confirm, titleVisibility: .visible) {
+                Button("Replace all data", role: .destructive) {
+                    if store.restoreBackup(info) { onRestore(); dismiss() }
+                    else { message = "Couldn't read that backup" }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("Your current data will be replaced by this backup.") }
+        }
+    }
+
+    private func compare(_ label: String, _ backup: Int, _ live: Int) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text("\(backup)")
+            Text("now \(live)").font(.caption).foregroundStyle(Zen.ink3)
+        }
     }
 }
 

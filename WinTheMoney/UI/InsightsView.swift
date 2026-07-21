@@ -15,8 +15,10 @@ struct InsightsView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     periodChips
+                    MonthReportEntryCard()
                     AIInsightsCard()
                     tagCard
+                    subscriptionsCard
                     intlRewardsCard
                     brandCard
                     trendCard
@@ -118,6 +120,64 @@ struct InsightsView: View {
             }
         }
         .padding(18).frame(maxWidth: .infinity, alignment: .leading).zenCard(26)
+    }
+
+    // MARK: subscriptions & recurring bills
+    /// Fixed subscriptions and variable recurring bills are totalled separately — an electricity
+    /// autopay has a real cadence but no fixed price, so folding it into "subscription burn" would
+    /// overstate a figure people treat as cancellable.
+    private var subscriptionsCard: some View {
+        let groups = store.recurringGroups.filter { $0.cadence != nil }
+        let burn = store.subscriptionBurn
+        let bills = store.recurringBillsBurn
+        return VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Subscriptions & recurring")
+            if groups.isEmpty {
+                Text("Nothing recurring detected yet — this needs at least three charges to the same payee.")
+                    .font(.caption).foregroundStyle(Zen.ink3)
+            } else {
+                HStack {
+                    Label("Subscriptions", systemImage: "repeat").font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink)
+                    Spacer()
+                    Text("\(INR.compact(burn))/mo").font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                }
+                if bills > 0 {
+                    HStack {
+                        Label("Recurring bills (variable)", systemImage: "bolt").font(.caption).foregroundStyle(Zen.ink2)
+                        Spacer()
+                        Text("~\(INR.compact(bills))/mo").font(.caption.weight(.semibold)).foregroundStyle(Zen.ink2)
+                    }
+                }
+                Divider().opacity(0.4)
+                ForEach(groups) { g in
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(g.name).font(.subheadline.weight(.semibold))
+                                .foregroundStyle(g.muted ? Zen.ink3 : Zen.ink).lineLimit(1)
+                            Text(subtitle(for: g)).font(.caption2).foregroundStyle(Zen.ink3)
+                        }
+                        Spacer()
+                        Text("\(g.variableAmount ? "~" : "")\(INR.compact(g.expectedAmount))")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(g.muted ? Zen.ink3 : Zen.ink)
+                        Button { store.toggleRecurringMute(g.key) } label: {
+                            Image(systemName: g.muted ? "bell.slash.fill" : "bell")
+                                .font(.caption).foregroundStyle(g.muted ? Zen.caution : Zen.accentDeep)
+                        }.buttonStyle(.plain)
+                    }
+                    .opacity(g.muted ? 0.6 : 1)
+                }
+            }
+        }
+        .padding(18).frame(maxWidth: .infinity, alignment: .leading).zenCard(26)
+    }
+
+    private func subtitle(for g: Store.RecurringGroup) -> String {
+        guard let cad = g.cadence else { return "\(g.count) charges" }
+        if g.possiblyCancelled { return "\(cad.label) · possibly cancelled" }
+        if g.muted { return "\(cad.label) · muted" }
+        guard let next = g.nextDate else { return cad.label }
+        return "\(cad.label) · next \(next.formatted(.dateTime.day().month(.abbreviated)))"
     }
 
     // MARK: top brands (horizontal bars)

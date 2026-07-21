@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nidhi — private, on-device personal finance for iOS</title>
+<meta name="description" content="Nidhi is a private, on-device personal-finance app for iOS. No backend, no analytics, no third-party SDKs — everything stays on your phone.">
+<meta name="color-scheme" content="light dark">
+<style>
+  :root {
+    --bg1: #EAF1FB;
+    --bg2: #EDF4F6;
+    --bg3: #EAF7F0;
+    --ink: #2A3340;
+    --ink2: #5C6675;
+    --ink3: #9AA3B2;
+    --track: rgba(42, 51, 64, 0.07);
+    --accent: #6E9BD8;
+    --accent-deep: #4F7FC4;
+    --green: #7FC4A3;
+    --green-deep: #5BA585;
+    --card-bg: rgba(255, 255, 255, 0.55);
+    --card-border: rgba(42, 51, 64, 0.09);
+    --code-bg: rgba(42, 51, 64, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg1: #10151C;
+      --bg2: #12181C;
+      --bg3: #101A16;
+      --ink: #E8ECF2;
+      --ink2: #AEB8C6;
+      --ink3: #6E7A8A;
+      --track: rgba(255, 255, 255, 0.10);
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --card-border: rgba(255, 255, 255, 0.10);
+      --code-bg: rgba(255, 255, 255, 0.07);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3));
+    background-attachment: fixed;
+    line-height: 1.55;
+  }
+
+  a { color: var(--accent-deep); }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Hero */
+  .hero { padding: 72px 0 48px; text-align: center; }
+  .hero h1 {
+    font-size: clamp(2.2rem, 6vw, 3.2rem);
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  .hero .hindi { color: var(--ink3); font-weight: 400; font-size: 0.6em; margin-left: 8px; }
+  .hero .tagline {
+    font-size: clamp(1.05rem, 3vw, 1.35rem);
+    color: var(--ink2);
+    margin: 0 0 28px;
+  }
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 32px;
+  }
+  .badge {
+    background: var(--track);
+    color: var(--ink2);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+  .btn {
+    display: inline-block;
+    padding: 12px 24px;
+    border-radius: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: transform 0.15s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--green));
+    color: #fff;
+  }
+  .btn-secondary {
+    background: var(--card-bg);
+    color: var(--ink);
+    border: 1px solid var(--card-border);
+  }
+
+  section { padding: 40px 0; }
+  h2 {
+    font-size: clamp(1.4rem, 4vw, 1.8rem);
+    text-align: center;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .section-sub {
+    text-align: center;
+    color: var(--ink2);
+    margin: 0 auto 32px;
+    max-width: 620px;
+  }
+
+  /* Screenshots */
+  .screens {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 18px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .screens figure {
+    margin: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 10px;
+  }
+  .screens img { width: 100%; height: auto; display: block; border-radius: 14px; }
+  .screens figcaption {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--ink3);
+    margin-top: 8px;
+  }
+
+  /* Feature grid */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .feature-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 22px;
+    backdrop-filter: blur(10px);
+  }
+  .feature-card .icon { font-size: 1.6rem; margin-bottom: 10px; display: block; }
+  .feature-card h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  .feature-card p { margin: 0; color: var(--ink2); font-size: 0.92rem; }
+
+  /* Privacy */
+  .privacy-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 24px;
+    padding: 32px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .privacy-card ul { margin: 0; padding-left: 1.2em; color: var(--ink2); }
+  .privacy-card li { margin-bottom: 10px; }
+  .privacy-card .callout {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--card-border);
+    font-size: 0.9rem;
+    color: var(--ink3);
+  }
+
+  /* Build it yourself */
+  .build-card {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .build-card ul { color: var(--ink2); }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  /* Footer */
+  footer {
+    padding: 32px 0 56px;
+    text-align: center;
+    color: var(--ink3);
+    font-size: 0.85rem;
+  }
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 18px;
+    margin-bottom: 16px;
+  }
+  .footer-links a { color: var(--ink2); text-decoration: none; font-weight: 600; }
+  .footer-links a:hover { color: var(--accent-deep); }
+  footer .disclaimer { max-width: 620px; margin: 0 auto; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Nidhi<span class="hindi">निधि</span></h1>
+    <p class="tagline">Your money, entirely on your device.</p>
+    <div class="badges">
+      <span class="badge">No backend</span>
+      <span class="badge">No analytics</span>
+      <span class="badge">Open source</span>
+    </div>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/suhailsalim/win-the-money">View on GitHub</a>
+      <a class="btn btn-secondary" href="docs/">Read the docs</a>
+    </div>
+  </div>
+</header>
+
+<section class="screenshots">
+  <div class="wrap">
+    <h2>A quick look</h2>
+    <p class="section-sub">Real screenshots are on the way — these are placeholder frames until a demo-seeded build is captured.</p>
+    <div class="screens">
+      <figure>
+        <img src="screenshots/home-placeholder.svg" alt="Placeholder frame for the Home tab" width="300" height="620" loading="lazy">
+        <figcaption>Home</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/plan-placeholder.svg" alt="Placeholder frame for the Plan tab" width="300" height="620" loading="lazy">
+        <figcaption>Plan</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/wealth-placeholder.svg" alt="Placeholder frame for the Wealth tab" width="300" height="620" loading="lazy">
+        <figcaption>Wealth</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="wrap">
+    <h2>What it does</h2>
+    <p class="section-sub">Net worth, banks, cards, deposits, investments, budgets, goals, income &amp; tax — all tracked on-device.</p>
+    <div class="features">
+      <div class="feature-card">
+        <span class="icon">📄</span>
+        <h3>Statement import</h3>
+        <p>Password-protected bank/card PDF statements (HDFC, Federal, Axis, ICICI, Scapia…) parsed on-device, including combined statements with FDs/RDs.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">📧</span>
+        <h3>Gmail auto-import</h3>
+        <p>Read-only OAuth scan of transaction-alert emails and statement attachments.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">📊</span>
+        <h3>Budgets</h3>
+        <p>Per-category caps (monthly / quarterly / annual / custom), period navigation (month, YTD, FYTD, FY), drill-in to transactions.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">🏆</span>
+        <h3>Goals backed by real assets</h3>
+        <p>Back goals with real assets so progress updates itself; light XP/levels/badges.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">📈</span>
+        <h3>Investments, live prices</h3>
+        <p>Live prices from Yahoo Finance (stocks/ETFs) and AMFI (mutual funds) — free, no API keys.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">🧾</span>
+        <h3>Indian tax engine</h3>
+        <p>Income streams, payslip import, a real Indian slab engine (both regimes compared).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="privacy">
+  <div class="wrap">
+    <h2>Privacy</h2>
+    <p class="section-sub">The core selling point, made verifiable.</p>
+    <div class="privacy-card">
+      <ul>
+        <li>No backend, no analytics, no tracking, no third-party SDKs.</li>
+        <li>Network calls are limited to services you enable: Gmail (read-only), Setu AA, Yahoo/AMFI/FX quotes, and your chosen AI provider (aggregates only).</li>
+        <li>The repo is open source — the claims above are verifiable in the code.</li>
+      </ul>
+      <p class="callout">This page collects nothing either: no analytics, no cookies, no third-party scripts or fonts. View source and check for yourself.</p>
+    </div>
+  </div>
+</section>
+
+<section class="build">
+  <div class="wrap">
+    <h2>Build it yourself</h2>
+    <p class="section-sub">Nidhi isn't on the App Store — it ships only via a free personal Apple developer team, so you build and sideload it yourself.</p>
+    <div class="build-card">
+      <h3>Requirements</h3>
+      <ul>
+        <li>Xcode 26+ / iOS 26 SDK</li>
+        <li>An iOS 26 device or simulator</li>
+        <li>(Optional) A Google Cloud OAuth iOS client ID for Gmail import</li>
+        <li>(Optional) Setu Account Aggregator credentials for AA bank sync</li>
+      </ul>
+      <pre><code>git clone https://github.com/suhailsalim/win-the-money.git
+cd win-the-money
+open WinTheMoney.xcodeproj</code></pre>
+      <p>Or build for a simulator from the CLI — see the full <code>xcodebuild</code> command in the <a href="https://github.com/suhailsalim/win-the-money#build--run">README</a>.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="https://github.com/suhailsalim/win-the-money">GitHub</a>
+      <a href="docs/">Documentation</a>
+      <a href="https://github.com/suhailsalim/win-the-money/blob/main/LICENSE">GPL-3.0 License</a>
+    </div>
+    <p class="disclaimer">
+      Personal project, open-sourced. No warranty. Not affiliated with any bank, Google, Yahoo, AMFI, or Setu.
+      Trademarks (bank, card, and merchant names) belong to their respective owners and are used only for
+      factual identification; no bank artwork is bundled.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

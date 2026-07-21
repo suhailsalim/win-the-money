@@ -26,7 +26,7 @@ extension KeyedDecodingContainer {
 
 // MARK: BudgetCategory
 extension BudgetCategory {
-    enum CodingKeys: String, CodingKey { case id, name, symbol, spent, plan, color, isSystem, period, customMonths, anchor, kind }
+    enum CodingKeys: String, CodingKey { case id, name, symbol, spent, plan, color, isSystem, period, customMonths, anchor, kind, capHistory }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.decode(.id, default: UUID())
@@ -44,12 +44,13 @@ extension BudgetCategory {
         // not .needs) rather than hardcoding the name a second time here.
         kind = CategoryKind(rawValue: c.decode(.kind, default:
             (Store.baseCategories.first { $0.name == name }?.kind ?? .needs).rawValue)) ?? .needs
+        capHistory = c.decode(.capHistory, default: [:])
     }
 }
 
 // MARK: Txn
 extension Txn {
-    enum CodingKeys: String, CodingKey { case id, merchant, symbol, category, account, amount, date, externalId, source, counterparty, statementId, statementRecordId, needsReview, tags, transfer, cardholder, reward, rewardCurrency, forexCurrency, forexAmount }
+    enum CodingKeys: String, CodingKey { case id, merchant, symbol, category, account, amount, date, externalId, source, counterparty, statementId, statementRecordId, needsReview, tags, transfer, cardholder, reward, rewardCurrency, forexCurrency, forexAmount, loanId }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.decode(.id, default: UUID())
@@ -72,6 +73,7 @@ extension Txn {
         rewardCurrency = c.decode(.rewardCurrency, default: nil)
         forexCurrency = c.decode(.forexCurrency, default: nil)
         forexAmount = c.decode(.forexAmount, default: nil)
+        loanId = c.decode(.loanId, default: nil)
     }
 }
 
@@ -135,6 +137,41 @@ extension Deposit {
         startDate = c.decode(.startDate, default: Date())
         maturityDate = c.decode(.maturityDate, default: Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date())
         identifier = c.decode(.identifier, default: nil)
+    }
+}
+
+// MARK: LoanAdjustment
+extension LoanAdjustment {
+    enum CodingKeys: String, CodingKey { case id, date, amount, note }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.decode(.id, default: UUID())
+        date = c.decode(.date, default: Date())
+        amount = c.decode(.amount, default: 0)
+        note = c.decode(.note, default: "")
+    }
+}
+
+// MARK: Loan
+extension Loan {
+    enum CodingKeys: String, CodingKey { case id, name, lender, principal, rate, emi, startDate, tenureMonths, mask, counterpartyKey, symbol, principalAdjustments, anchorPrincipal, anchorAsOf, closed }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.decode(.id, default: UUID())
+        name = c.decode(.name, default: "")
+        lender = c.decode(.lender, default: "")
+        principal = c.decode(.principal, default: 0)
+        rate = c.decode(.rate, default: 0)
+        emi = c.decode(.emi, default: 0)
+        startDate = c.decode(.startDate, default: Date())
+        tenureMonths = c.decode(.tenureMonths, default: 0)
+        mask = c.decode(.mask, default: "")
+        counterpartyKey = c.decode(.counterpartyKey, default: "")
+        symbol = c.decode(.symbol, default: "house.fill")
+        principalAdjustments = c.decode(.principalAdjustments, default: [])
+        anchorPrincipal = c.decode(.anchorPrincipal, default: nil)
+        anchorAsOf = c.decode(.anchorAsOf, default: nil)
+        closed = c.decode(.closed, default: false)
     }
 }
 

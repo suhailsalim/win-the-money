@@ -2,6 +2,9 @@
 
 *(formerly "Win the Money" — code names, targets and bundle id keep the old name)*
 
+**[Website](https://suhailsalim.github.io/win-the-money/)** · **[Docs](https://suhailsalim.github.io/win-the-money/docs/)**
+*(site not yet published — see [`plans/PLAN-website.md`](plans/PLAN-website.md) for status)*
+
 A private, on-device personal-finance tracker for iOS — built in SwiftUI for Indian banking
 (₹/INR-first). It tracks **net worth, bank & card balances, transactions, budgets, fixed/recurring
 deposits, stocks/ETFs/mutual funds, goals, income & tax**, and can pull statements & alerts straight

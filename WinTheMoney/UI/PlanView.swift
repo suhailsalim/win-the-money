@@ -49,9 +49,23 @@ struct PlanView: View {
 
     private var window: PlanWindow { Self.window(mode: mode, offset: offset) }
     private func spent(_ c: BudgetCategory) -> Double { store.spend(inCategory: c.name, from: window.start, to: window.end) }
-    private func plan(_ c: BudgetCategory) -> Double { c.monthlyPlan * Double(window.months) }
+    /// The window's months as "YYYY-MM" keys. Always exactly `window.months` entries, so a category
+    /// with no recorded history sums to `monthlyPlan * months` — identical to the pre-snapshot behaviour.
+    private var windowMonthKeys: [String] {
+        let cal = Calendar.current
+        let first = cal.dateInterval(of: .month, for: window.start)?.start ?? window.start
+        return (0..<max(0, window.months)).compactMap { i in
+            cal.date(byAdding: .month, value: i, to: first).map { Store.monthKey($0) }
+        }
+    }
+    /// Past months use the cap that was in force then; the current month always reads the live cap so
+    /// an in-month edit reflects immediately (never via its own snapshot, which could be stale).
+    private func plan(_ c: BudgetCategory) -> Double {
+        let live = Store.monthKey(Date())
+        return windowMonthKeys.map { $0 == live ? c.monthlyPlan : c.plan(forMonth: $0) }.reduce(0, +)
+    }
     private var periodSpent: Double { store.totalSpend(from: window.start, to: window.end) }
-    private var periodPlan: Double { store.categories.filter { $0.kind != .investments }.map(\.monthlyPlan).reduce(0, +) * Double(window.months) }
+    private var periodPlan: Double { store.categories.filter { $0.kind != .investments }.map { plan($0) }.reduce(0, +) }
     private var periodLeft: Double { periodPlan - periodSpent }
     private var periodPct: Int { periodPlan > 0 ? Int((periodSpent / periodPlan * 100).rounded()) : 0 }
     private var periodIncome: Double { store.totalIncome(from: window.start, to: window.end) }

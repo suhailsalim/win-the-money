@@ -9,7 +9,7 @@ final class Store: ObservableObject {
     @Published var tab: Tab = .home
 
     @Published var categories: [BudgetCategory] = []
-    @Published var txns: [Txn] = []
+    @Published var txns: [Txn] = [] { didSet { searchBlobs.removeAll(keepingCapacity: true) } }
     @Published var banks: [BankAccount] = []
     @Published var cards: [CreditCard] = []
     @Published var deposits: [Deposit] = []
@@ -17,6 +17,8 @@ final class Store: ObservableObject {
     @Published var milestones: [Milestone] = []
     @Published var badges: [Badge] = []
     @Published var investments: [Investment] = []
+    /// Borrowings (home/car/personal…). Derived surface lives in `Store+Loans.swift`.
+    @Published var loans: [Loan] = []
 
     // statement ingestion ledger + the conflicts queue (rows a parser couldn't fully resolve)
     @Published var statements: [StatementRecord] = []
@@ -30,6 +32,9 @@ final class Store: ObservableObject {
 
     /// Learned merchant/counterparty → category name (auto-applied on import).
     @Published var merchantRules: [String: String] = [:]
+    /// Recurring group keys the user muted ("not a subscription"). Muted groups stay listed but
+    /// drop out of upcoming charges, burn totals and notifications.
+    @Published var mutedRecurringKeys: Set<String> = []
 
     // live FX rates (currency → INR), persisted & refreshed
     @Published var fxRates: [String: Double] = ["INR": 1]
@@ -59,15 +64,66 @@ final class Store: ObservableObject {
     }
 
     /// Write a backup now (Files + iCloud Drive when available). Returns where it landed.
+    /// A manual backup is never blocked by the shrink gate — the user asked for it — but it says so.
     @discardableResult
-    func backupNow() -> String { BackupManager.write(exportBundle()) }
-    /// Called when the app backgrounds.
-    func autoBackupIfEnabled() { if autoBackupEnabled, hasData { _ = backupNow() } }
+    func backupNow() -> String {
+        let shrinking = backupWouldShrink()
+        let where_ = BackupManager.write(exportBundle())
+        guard shrinking, where_ != "—" else { return where_ }
+        return "\(where_) — warning: far fewer transactions than the last backup"
+    }
+
+    /// The auto-backup safety gate. The rule is deliberately dumb and transparent: if the previous
+    /// backup held more than 20 transactions and we're about to write fewer than 25% of that, the
+    /// live store has almost certainly been wiped or failed to decode — keep the old backups.
+    /// Returns false when there's no previous backup to compare against.
+    func backupWouldShrink() -> Bool {
+        guard let old = BackupManager.latestData(), let s = previewBackup(old) else { return false }
+        return s.txns > 20 && Double(txns.count) < Double(s.txns) * 0.25
+    }
+
+    /// Called on launch and when the app backgrounds.
+    func autoBackupIfEnabled() {
+        guard autoBackupEnabled, hasData, !backupWouldShrink() else { return }
+        _ = backupNow()
+    }
+
     /// Restore the most recent auto-backup; returns success.
     @discardableResult
     func restoreLatestBackup() -> Bool {
         guard let data = BackupManager.latestData() else { return false }
+        return restore(data)
+    }
+
+    /// Restore one specific backup file from the rotation.
+    @discardableResult
+    func restoreBackup(_ info: BackupManager.BackupInfo) -> Bool {
+        guard let data = BackupManager.data(at: info.url) else { return false }
+        return restore(data)
+    }
+
+    /// Shared restore path: snapshot the state we're about to destroy first, then replace.
+    private func restore(_ data: Data) -> Bool {
+        if hasData { BackupManager.write(exportBundle(), preRestore: true) }
         return importBundle(data, replace: true)
+    }
+
+    /// What a backup file holds, for the restore preview. nil when the file doesn't decode.
+    struct BackupSummary {
+        var exportedAt: Date
+        var txns = 0, banks = 0, cards = 0, deposits = 0, goals = 0, investments = 0
+        var firstTxn: Date?
+        var lastTxn: Date?
+    }
+
+    /// Decodes through the same tolerant `BackupBundle` path `importBundle` uses — never a second decoder.
+    func previewBackup(_ data: Data) -> BackupSummary? {
+        guard let b = try? Self.backupCoder.1.decode(BackupBundle.self, from: data) else { return nil }
+        let p = b.data
+        let dates = p.txns.map(\.date).sorted()
+        return BackupSummary(exportedAt: b.exportedAt, txns: p.txns.count, banks: p.banks.count,
+                             cards: p.cards.count, deposits: p.deposits.count, goals: p.goals.count,
+                             investments: p.investments.count, firstTxn: dates.first, lastTxn: dates.last)
     }
 
     var targetLabel: String { INR.compact(netWorthTarget) }
@@ -119,7 +175,8 @@ final class Store: ObservableObject {
         [ Segment(label: "Bank balances", value: banksTotal, colorHex: "6E9BD8"),
           Segment(label: "Investments", value: investmentsTotal, colorHex: "5BA585"),
           Segment(label: "FD & RD", value: depositsTotal, colorHex: "7FC4A3"),
-          Segment(label: "Credit owed", value: -cardsTotal, colorHex: "9AA7BE") ]
+          Segment(label: "Credit owed", value: -cardsTotal, colorHex: "9AA7BE"),
+          Segment(label: "Loans", value: -loansOutstanding, colorHex: "7C8AA5") ]
             .filter { $0.value != 0 }
     }
 
@@ -281,6 +338,8 @@ final class Store: ObservableObject {
     /// quarterly/annual/custom cap counts spend over that whole window — e.g. a yearly insurance cap).
     func recomputeSpent() {
         recomputeBankBalances()   // any change to txns can move an anchored account's live balance
+        applyLoanLinks()          // EMI debits → "EMI & Loans" + "EMI" tag + linked loan (before totals)
+        snapshotCaps()            // keep this month's cap snapshot current as caps are edited
         for i in categories.indices {
             let (start, end) = cycleWindow(for: categories[i])
             let name = categories[i].name
@@ -321,15 +380,168 @@ final class Store: ObservableObject {
             return (start, cal.date(byAdding: .month, value: len, to: start) ?? now)
         }
     }
+    /// Locale/timezone-stable "YYYY-MM" key. Built from Calendar ints, never a DateFormatter,
+    /// so the key can't shift with the device locale or calendar.
+    static func monthKey(_ d: Date) -> String {
+        let c = Calendar.current.dateComponents([.year, .month], from: d)
+        return String(format: "%04d-%02d", c.year ?? 0, c.month ?? 0)
+    }
+
+    /// Plan total for one month, from each category's snapshot of the cap in force then.
+    /// Excludes Investment-kind categories, matching `planTotal`.
+    func capTotal(forMonth key: String) -> Double {
+        categories.filter { $0.kind != .investments }.map { $0.plan(forMonth: key) }.reduce(0, +)
+    }
+
+    /// Records the current month's caps. Called from `recomputeSpent()`, which runs on every mutation
+    /// path, so a month's stored value settles at the cap in force at that month's last moment — the
+    /// correct semantic. Keeps ~36 months; "YYYY-MM" sorts lexicographically, so pruning is a compare.
+    func snapshotCaps() {
+        let key = Self.monthKey(Date())
+        let cutoff = Self.monthKey(Calendar.current.date(byAdding: .month, value: -36, to: Date()) ?? Date())
+        for i in categories.indices {
+            categories[i].capHistory[key] = categories[i].monthlyPlan
+            if categories[i].capHistory.contains(where: { $0.key < cutoff }) {
+                categories[i].capHistory = categories[i].capHistory.filter { $0.key >= cutoff }
+            }
+        }
+    }
+
     var planMonths: [PlanMonth] {
         let cal = Calendar.current
         return (0...5).reversed().compactMap { i -> PlanMonth? in
             guard let d = cal.date(byAdding: .month, value: -i, to: Date()) else { return nil }
             let spend = monthSpend(monthsAgo: i)
-            let pct = planTotal > 0 ? Int((spend/planTotal*100).rounded()) : 0
+            // Past months are judged against the cap that applied then; the current month stays live
+            // so an in-month cap edit shows immediately.
+            let total = i == 0 ? planTotal : capTotal(forMonth: Self.monthKey(d))
+            let pct = total > 0 ? Int((spend/total*100).rounded()) : 0
             return PlanMonth(month: d.formatted(.dateTime.month(.abbreviated)), pct: pct, over: pct > 100)
         }
     }
+    // MARK: - Search
+    /// Every optional; an all-nil filter matches everything. Kept a plain struct so callers can
+    /// compose drill-in presets with live chips without any shared state.
+    struct TxnFilter {
+        var account: String? = nil
+        var category: String? = nil
+        var tag: String? = nil
+        var from: Date? = nil
+        var to: Date? = nil
+        var minAmount: Double? = nil
+        var maxAmount: Double? = nil
+        var internationalOnly = false
+        var needsReviewOnly = false
+        var hideTransfers = false
+    }
+
+    /// Lowercased, diacritic-folded haystack per txn, built once per `txns` change rather than per
+    /// keystroke (thousands of rows × every character typed would otherwise refold the whole ledger).
+    private var searchBlobs: [UUID: String] = [:]
+
+    private func searchBlob(for t: Txn) -> String {
+        if let b = searchBlobs[t.id] { return b }
+        // Includes counterparty: UPI payees live there and usually differ from the cleaned merchant.
+        let b = [t.merchant, t.counterparty ?? "", t.category, t.account, t.tags.joined(separator: " ")]
+            .joined(separator: " ")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        searchBlobs[t.id] = b
+        return b
+    }
+
+    /// Split a raw query into normalised words. Multi-word queries AND together, and each word may
+    /// match a different field.
+    static func searchWords(_ q: String) -> [String] {
+        q.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .split(whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    /// A numeric word also matches |amount| within ±0.5 — users type "649" for a −649 spend.
+    func txnMatches(_ t: Txn, words: [String]) -> Bool {
+        guard !words.isEmpty else { return true }
+        let hay = searchBlob(for: t)
+        return words.allSatisfy { w in
+            if hay.contains(w) { return true }
+            if let n = Double(w) { return abs(abs(t.amount) - n) <= 0.5 }
+            return false
+        }
+    }
+
+    /// Pure search + filter over the whole ledger. Transfers stay visible unless explicitly hidden —
+    /// finding a card bill payment is a legitimate search.
+    func searchTxns(_ query: String, filter: TxnFilter = TxnFilter()) -> [Txn] {
+        var xs = txns
+        if let a = filter.account { xs = xs.filter { $0.account == a } }
+        if let c = filter.category { xs = xs.filter { $0.category == c } }
+        if let tg = filter.tag { xs = xs.filter { $0.tags.contains(tg) } }
+        if let f = filter.from { xs = xs.filter { $0.date >= f } }
+        if let t = filter.to { xs = xs.filter { $0.date <= t } }
+        if let lo = filter.minAmount { xs = xs.filter { abs($0.amount) >= lo } }
+        if let hi = filter.maxAmount { xs = xs.filter { abs($0.amount) <= hi } }
+        if filter.internationalOnly { xs = xs.filter(\.isInternational) }
+        if filter.needsReviewOnly { xs = xs.filter(\.needsReview) }
+        if filter.hideTransfers { xs = xs.filter { !$0.transfer } }
+        let words = Self.searchWords(query)
+        guard !words.isEmpty else { return xs }
+        return xs.filter { txnMatches($0, words: words) }
+    }
+
+    // MARK: - Cash-flow forecast
+    /// Assembles live state into `CashflowForecast.Inputs`. All the judgement lives here; the maths
+    /// lives in the pure `CashflowForecast`.
+    func forecastInputs(today: Date = Date(), horizon: Int = 30) -> CashflowForecast.Inputs {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: today)
+        let end = cal.date(byAdding: .day, value: horizon, to: start) ?? start
+        var i = CashflowForecast.Inputs()
+        // Liquid only — deposits and investments aren't spendable this month.
+        i.startingBalance = banks.map(\.balance).reduce(0, +)
+
+        // Income: project each monthly stream on its credit day. A stream already credited this month
+        // (matching Income txn on/after its credit day) contributes nothing further; a stream whose day
+        // has passed with no matching txn is still projected, flagged as late rather than dropped.
+        let monthStart = cal.dateInterval(of: .month, for: start)?.start ?? start
+        for s in incomeStreams {
+            guard let day = s.creditDay, s.perPeriodAmount > 0 else { continue }
+            let amount = s.monthly ? s.perPeriodAmount : s.perPeriodAmount / 12
+            for m in 0...(horizon / 28 + 1) {
+                guard let base = cal.date(byAdding: .month, value: m, to: monthStart),
+                      let due = cal.date(bySetting: .day, value: min(day, cal.range(of: .day, in: .month, for: base)?.count ?? day), of: base)
+                else { continue }
+                guard due >= start, due <= end else { continue }
+                let alreadyPaid = txns.contains {
+                    $0.category == "Income" && $0.amount > 0
+                        && cal.isDate($0.date, equalTo: due, toGranularity: .month)
+                        && $0.date >= cal.date(byAdding: .day, value: -3, to: due)!
+                }
+                if alreadyPaid { continue }
+                i.income.append(.init(label: s.name, date: due, amount: amount,
+                                      expectedLate: due < start))
+            }
+        }
+
+        // Cash outflows: predicted recurring charges (subscriptions AND transfers/SIPs — a SIP is a
+        // real cash outflow even though it isn't spend) plus card bills falling due in the horizon.
+        for g in upcomingCharges(within: horizon) {
+            guard let d = g.nextDate else { continue }
+            i.bills.append(.init(label: g.name, date: d, amount: -g.expectedAmount))
+        }
+        for c in cards {
+            guard let due = c.dueDate, due >= start, due <= end else { continue }
+            let amount = c.totalDue ?? c.outstanding
+            guard amount > 0 else { continue }
+            // A card bill is cash out, never budget spend — the purchases behind it were already
+            // counted against categories when they happened.
+            i.bills.append(.init(label: "\(c.name) bill", date: due, amount: -amount))
+        }
+
+        i.remainingBudget = categories.filter { $0.kind != .investments }
+            .map { max(0, $0.monthlyPlan - $0.spent) }.reduce(0, +)
+        return i
+    }
+
+    var forecast: CashflowForecast { CashflowForecast.compute(forecastInputs(), today: Date()) }
+
     /// Net spend for one category within an arbitrary [from, to) window (for Plan period/month views).
     func spend(inCategory name: String, from: Date, to: Date) -> Double {
         max(0, txns.filter { $0.category == name && $0.date >= from && $0.date < to }
@@ -592,7 +804,8 @@ final class Store: ObservableObject {
         WTMSnapshot(netWorth: liquidNetWorth, netWorthChange: nwChange, spent: spentTotal, plan: planTotal,
                     targetPct: toTargetPct, topGoalTitle: g?.title ?? "No goal yet",
                     topGoalSaved: g?.saved ?? 0, topGoalTarget: g?.target ?? 1,
-                    streakMonths: streakMonths, nwHistory: nwHistory, updated: Date()).save()
+                    streakMonths: streakMonths, nwHistory: nwHistory, updated: Date(),
+                    cats: intentCategorySnaps, quickPresets: intentQuickPresets).save()
         WidgetCenter.shared.reloadAllTimelines()
         if BudgetLiveActivity.isRunning {
             BudgetLiveActivity.update(spent: spentTotal, plan: planTotal, daysLeft: daysLeftInMonth)
@@ -1066,18 +1279,149 @@ final class Store: ObservableObject {
     }
 
     // MARK: recurring transfers
-    struct RecurringGroup: Identifiable { var id: String { key }; var key: String; var name: String; var count: Int; var total: Double; var lastDate: Date; var category: String; var linked: Bool }
+    /// How often a recurring charge repeats. Buckets are deliberately wide: real billing dates drift
+    /// by a few days (weekends, month lengths, bank holidays).
+    enum RecurringCadence: String, CaseIterable {
+        case weekly, monthly, quarterly, annual
+        /// Nominal gap in days, used to project the next charge.
+        var days: Int { switch self { case .weekly: 7; case .monthly: 30; case .quarterly: 91; case .annual: 365 } }
+        var label: String { rawValue.capitalized }
+        /// Monthly-equivalent multiplier, so cadences fold into one burn figure.
+        var perMonth: Double { 30.0 / Double(days) }
+        /// The bucket a gap of `d` days falls in, or nil if it matches no cadence.
+        static func bucket(days d: Double) -> RecurringCadence? {
+            switch d {
+            case 6...8: .weekly
+            case 26...35: .monthly
+            case 85...100: .quarterly
+            case 350...380: .annual
+            default: nil
+            }
+        }
+    }
+
+    struct RecurringGroup: Identifiable {
+        var id: String { key }
+        var key: String; var name: String; var count: Int; var total: Double; var lastDate: Date
+        var category: String; var linked: Bool
+        var cadence: RecurringCadence? = nil
+        var confidence: Double = 0
+        var expectedAmount: Double = 0
+        /// Amounts swing >20% (an electricity autopay, not a fixed subscription): show "~" and keep it
+        /// out of the fixed-subscription burn total.
+        var variableAmount: Bool = false
+        var nextDate: Date? = nil
+        /// Two or more cycles have passed with no charge — surfaced as "possibly cancelled" rather
+        /// than silently predicted forever.
+        var possiblyCancelled: Bool = false
+        var muted: Bool = false
+        /// A transfer or income group (SIP, self-transfer). Still worth a reminder — "fund the
+        /// account" is the most valuable alert — but never counted as subscription spend.
+        var isTransfer: Bool = false
+    }
+
+    /// Median of a non-empty list; caller guarantees non-empty.
+    static func median(_ xs: [Double]) -> Double {
+        let s = xs.sorted()
+        guard !s.isEmpty else { return 0 }
+        return s.count % 2 == 1 ? s[s.count / 2] : (s[s.count / 2 - 1] + s[s.count / 2]) / 2
+    }
+
+    /// Infer a cadence from a group's charge dates. Pure and static so it can be exercised offline.
+    /// Needs >= 3 charges and >= 60% of gaps landing in the same bucket.
+    static func inferCadence(dates: [Date]) -> (cadence: RecurringCadence, confidence: Double)? {
+        let sorted = dates.sorted()
+        guard sorted.count >= 3 else { return nil }
+        let gaps = zip(sorted, sorted.dropFirst()).map { $1.timeIntervalSince($0) / 86_400 }
+        guard !gaps.isEmpty, let cad = RecurringCadence.bucket(days: median(gaps)) else { return nil }
+        let hits = gaps.filter { RecurringCadence.bucket(days: $0) == cad }.count
+        let confidence = Double(hits) / Double(gaps.count)
+        return confidence >= 0.6 ? (cad, confidence) : nil
+    }
+
+    /// Next expected charge for a group whose last charge was `last`. Rolls forward at most once when
+    /// the projected date has already passed; returns nil once 2+ cycles have elapsed (likely cancelled).
+    static func projectNext(last: Date, cadence: RecurringCadence, now: Date = Date()) -> Date? {
+        let cal = Calendar.current
+        guard let first = cal.date(byAdding: .day, value: cadence.days, to: last) else { return nil }
+        if first >= now { return first }
+        guard let second = cal.date(byAdding: .day, value: cadence.days, to: first) else { return nil }
+        return second >= now ? second : nil
+    }
+
     var recurringGroups: [RecurringGroup] {
-        let debits = txns.filter { spendContribution($0) > 0 }
-        let groups = Dictionary(grouping: debits) { Self.ruleKey($0.counterparty ?? $0.merchant) }
+        // Include transfers/income here (they're excluded from spend totals downstream, not from
+        // detection) so SIPs and self-transfers can still produce reminders.
+        let candidates = txns.filter { spendContribution($0) > 0 || $0.transfer }
+        let groups = Dictionary(grouping: candidates) { Self.ruleKey($0.counterparty ?? $0.merchant) }
+        let now = Date()
         return groups.compactMap { key, items -> RecurringGroup? in
             guard key.count > 1, items.count >= 3 else { return nil }
-            let total = items.map { abs($0.amount) }.reduce(0, +)
-            let last = items.map(\.date).max() ?? Date()
-            let name = items.first?.merchant ?? key
-            return RecurringGroup(key: key, name: name, count: items.count, total: total, lastDate: last,
-                                  category: items.first?.category ?? "Other", linked: merchantRules[key] != nil)
+            let amounts = items.map { abs($0.amount) }
+            let total = amounts.reduce(0, +)
+            let last = items.map(\.date).max() ?? now
+            var g = RecurringGroup(key: key, name: items.first?.merchant ?? key, count: items.count,
+                                   total: total, lastDate: last,
+                                   category: items.first?.category ?? "Other",
+                                   linked: merchantRules[key] != nil)
+            g.muted = mutedRecurringKeys.contains(key)
+            g.isTransfer = items.contains { $0.transfer } || items.first?.category == "Income"
+            // Price rises are normal, so the expected amount is the median of the last 3 charges
+            // rather than anything that assumes equal amounts.
+            let recent = items.sorted { $0.date > $1.date }.prefix(3).map { abs($0.amount) }
+            g.expectedAmount = Self.median(Array(recent))
+            if g.expectedAmount > 0 {
+                let spread = (amounts.max() ?? 0) - (amounts.min() ?? 0)
+                g.variableAmount = spread / g.expectedAmount > 0.2
+            }
+            if let (cad, conf) = Self.inferCadence(dates: items.map(\.date)) {
+                g.cadence = cad; g.confidence = conf
+                g.nextDate = Self.projectNext(last: last, cadence: cad, now: now)
+                g.possiblyCancelled = g.nextDate == nil
+            }
+            return g
         }.sorted { $0.count > $1.count }
+    }
+
+    /// Predicted charges landing within `days`, soonest first. Muted and cancelled groups drop out.
+    func upcomingCharges(within days: Int = 7) -> [RecurringGroup] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date()
+        return recurringGroups
+            .filter { !$0.muted && !$0.possiblyCancelled }
+            .filter { g in g.nextDate.map { $0 <= cutoff } ?? false }
+            .sorted { ($0.nextDate ?? .distantFuture) < ($1.nextDate ?? .distantFuture) }
+    }
+
+    /// Fixed-subscription burn per month. Excludes variable-amount bills and transfers/SIPs — a
+    /// 50k SIP is not a subscription cost — and excludes muted groups.
+    var subscriptionBurn: Double {
+        recurringGroups
+            .filter { !$0.muted && !$0.possiblyCancelled && !$0.variableAmount && !$0.isTransfer }
+            .compactMap { g in g.cadence.map { g.expectedAmount * $0.perMonth } }
+            .reduce(0, +)
+    }
+
+    /// Variable recurring bills (electricity, phone) per month — reported separately from the fixed burn.
+    var recurringBillsBurn: Double {
+        recurringGroups
+            .filter { !$0.muted && !$0.possiblyCancelled && $0.variableAmount && !$0.isTransfer }
+            .compactMap { g in g.cadence.map { g.expectedAmount * $0.perMonth } }
+            .reduce(0, +)
+    }
+
+    func toggleRecurringMute(_ key: String) {
+        if mutedRecurringKeys.contains(key) { mutedRecurringKeys.remove(key) } else { mutedRecurringKeys.insert(key) }
+        save()
+        rescheduleRecurringReminders()
+    }
+
+    /// Cancel-and-reschedule as a set, so a recompute can't leave orphaned notifications behind.
+    func rescheduleRecurringReminders() {
+        let upcoming = upcomingCharges(within: 30)
+        NotificationManager.scheduleRecurring(upcoming.compactMap { g in
+            g.nextDate.map { (key: g.key, name: g.name, date: $0,
+                              amount: g.variableAmount ? nil : g.expectedAmount) }
+        })
     }
 
     private static func shortLogo(_ bank: String) -> String {
@@ -1152,6 +1496,7 @@ final class Store: ObservableObject {
         var badges: [Badge] = []
         var incomeStreams: [IncomeStream] = []
         var investments: [Investment] = []
+        var loans: [Loan] = []
         var statements: [StatementRecord] = []
         var conflicts: [DataConflict] = []
         var nwHistory: [Double] = []
@@ -1160,6 +1505,7 @@ final class Store: ObservableObject {
         var payslips: [Payslip] = []
         var advanceTaxPaidStages: [Int] = []
         var merchantRules: [String: String] = [:]
+        var mutedRecurringKeys: [String] = []
 
         init() {}
         init(from decoder: Decoder) throws {
@@ -1174,6 +1520,7 @@ final class Store: ObservableObject {
             badges     = c.decode(.badges, default: [])
             incomeStreams = c.decode(.incomeStreams, default: [])
             investments = c.decode(.investments, default: [])
+            loans      = c.decode(.loans, default: [])
             statements = c.decode(.statements, default: [])
             conflicts  = c.decode(.conflicts, default: [])
             nwHistory  = c.decode(.nwHistory, default: [])
@@ -1182,6 +1529,7 @@ final class Store: ObservableObject {
             payslips   = c.decode(.payslips, default: [])
             advanceTaxPaidStages = c.decode(.advanceTaxPaidStages, default: [])
             merchantRules = c.decode(.merchantRules, default: [:])
+            mutedRecurringKeys = c.decode(.mutedRecurringKeys, default: [])
         }
     }
 
@@ -1190,10 +1538,12 @@ final class Store: ObservableObject {
         p.categories = categories; p.txns = txns; p.banks = banks; p.cards = cards
         p.deposits = deposits; p.goals = goals; p.milestones = milestones; p.badges = badges
         p.incomeStreams = incomeStreams; p.investments = investments; p.nwHistory = nwHistory
+        p.loans = loans
         p.statements = statements; p.conflicts = conflicts
         p.fxRates = fxRates; p.taxProfile = taxProfile; p.payslips = payslips
         p.advanceTaxPaidStages = Array(advanceTaxPaidStages)
         p.merchantRules = merchantRules
+        p.mutedRecurringKeys = Array(mutedRecurringKeys)
         return p
     }
 
@@ -1201,11 +1551,13 @@ final class Store: ObservableObject {
         categories = p.categories; txns = p.txns; banks = p.banks; cards = p.cards
         deposits = p.deposits; goals = p.goals; milestones = p.milestones; badges = p.badges
         incomeStreams = p.incomeStreams; investments = p.investments; nwHistory = p.nwHistory
+        loans = p.loans
         statements = p.statements; conflicts = p.conflicts
         fxRates = p.fxRates.isEmpty ? ["INR": 1] : p.fxRates
         taxProfile = p.taxProfile; payslips = p.payslips
         advanceTaxPaidStages = Set(p.advanceTaxPaidStages)
         merchantRules = p.merchantRules
+        mutedRecurringKeys = Set(p.mutedRecurringKeys)
         if milestones.isEmpty { milestones = Self.defaultMilestones() }
         if badges.isEmpty { badges = Self.defaultBadges() }
         migrateRentBills()
@@ -1280,9 +1632,10 @@ final class Store: ObservableObject {
     /// kept (the user's recovery option). Gmail/Setu are reset by their own managers.
     func clearAll() {
         categories = []; txns = []; banks = []; cards = []; deposits = []; goals = []
-        investments = []; incomeStreams = []; nwHistory = []
+        investments = []; incomeStreams = []; nwHistory = []; loans = []
         statements = []; conflicts = []
         taxProfile = TaxProfile(); payslips = []; advanceTaxPaidStages = []; merchantRules = [:]
+        mutedRecurringKeys = []
         fxRates = ["INR": 1]
         milestones = Self.defaultMilestones()
         badges = Self.defaultBadges()
@@ -1363,6 +1716,9 @@ final class Store: ObservableObject {
         userName = b.userName
         netWorthTarget = b.netWorthTarget > 0 ? b.netWorthTarget : netWorthTarget
         preferStatementImport = b.preferStatementImport
+        // Swapping the txn set invalidates every derived total; this also cascades to anchored
+        // bank balances and asset-backed goal progress. Idempotent on a self-consistent bundle.
+        recomputeSpent()
         save()
         return true
     }
@@ -1374,20 +1730,9 @@ final class Store: ObservableObject {
         }
         union(&categories, p.categories); union(&banks, p.banks); union(&cards, p.cards)
         union(&deposits, p.deposits); union(&goals, p.goals); union(&incomeStreams, p.incomeStreams)
-        union(&investments, p.investments)
+        union(&investments, p.investments); union(&loans, p.loans)
         let extIds = Set(txns.compactMap(\.externalId)); let ids = Set(txns.map(\.id))
         txns += p.txns.filter { !ids.contains($0.id) && !($0.externalId.map { extIds.contains($0) } ?? false) }
-    }
-
-    func transactionsCSV() -> String {
-        func esc(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
-        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"; df.locale = Locale(identifier: "en_US_POSIX")
-        var rows = ["Date,Merchant,Category,Account,Amount,Type"]
-        for t in txns.sorted(by: { $0.date < $1.date }) {
-            rows.append([df.string(from: t.date), esc(t.merchant), esc(t.category), esc(t.account),
-                         String(format: "%.2f", abs(t.amount)), t.income ? "Credit" : "Debit"].joined(separator: ","))
-        }
-        return rows.joined(separator: "\n")
     }
 
     /// First launch: NO financial data. Only the milestone ladder + badge templates

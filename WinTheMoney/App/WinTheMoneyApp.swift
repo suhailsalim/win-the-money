@@ -39,6 +39,10 @@ struct WinTheMoneyApp: App {
                 StatementBackground.schedule()
             case .active:
                 lock.didBecomeActive()
+                store.drainQuickLogInbox()   // Siri/Shortcuts/widget quick logs → Store (main thread)
+                // Drained quick logs are new charges, so re-derive reminders AFTER draining. They're
+                // rescheduled as a set rather than patched individually, so this can't orphan any.
+                store.rescheduleRecurringReminders()
                 Task { await gmail.backgroundScanIfDue(into: store) }
                 Task { await gmail.statementScanIfDue(into: store) }
             default: break

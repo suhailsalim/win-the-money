@@ -31,3 +31,10 @@ xcuserdata/
 # Real bank/card statements must never be committed (AGENTS.md). Ignore all PDFs.
 *.pdf
 site/
+
+# Parser-harness fixtures: real statements AND the passwords that open them. `*.pdf` above already
+# covers the statements, but passwords.json is plain text — ignore the whole directory so a filled-in
+# password file can never be staged by accident. Local-only; see plans/PLAN-parser-regression-harness.md.
+tools/parser-harness/fixtures/
+tools/parser-harness/a.out
+tools/parser-harness/*.o

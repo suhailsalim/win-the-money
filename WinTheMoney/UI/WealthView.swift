@@ -22,6 +22,7 @@ struct WealthView: View {
                     composition
                 }
             }
+            LoansSection()
             VStack(alignment: .leading, spacing: 11) {
                 SectionHeader(title: "Milestone ladder")
                 VStack(spacing: 9) { ForEach(store.milestones) { milestoneRow($0) } }
@@ -38,6 +39,12 @@ struct WealthView: View {
                 Image(systemName: "arrow.up.right")
                 Text("\(INR.compact(store.nwChange)) (\(String(format: "%.1f", store.nwChangePct))%) vs last month")
             }.font(.caption.weight(.semibold)).foregroundStyle(Zen.greenDeep).padding(.top, 4)
+            // Loans are a liability, so Wealth states the net-of-loans figure explicitly rather
+            // than folding it into the headline users already know.
+            if store.hasLoans {
+                Text("\(INR.compact(store.totalTrackedNetOfLoans)) after \(INR.compact(store.loansOutstanding)) of loans")
+                    .font(.caption.weight(.semibold)).foregroundStyle(Zen.caution).padding(.top, 3)
+            }
 
             Chart(Array(rangedPoints.enumerated()), id: \.offset) { i, v in
                 AreaMark(x: .value("i", i), y: .value("v", v))

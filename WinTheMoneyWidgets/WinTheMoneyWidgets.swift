@@ -204,6 +204,7 @@ struct WinTheMoneyWidgetsBundle: WidgetBundle {
         NetWorthWidget()
         BudgetWidget()
         GoalWidget()
+        QuickLogWidget()
         BudgetLiveActivityWidget()
     }
 }

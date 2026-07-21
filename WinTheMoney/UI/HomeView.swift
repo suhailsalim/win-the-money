@@ -12,8 +12,33 @@ struct HomeView: View {
         VStack(spacing: 22) {
             if !gmail.pending.isEmpty { pendingBanner }
             if !dueCards.isEmpty { cardDueBanner }
+            if let m = MonthReviewBanner.dueMonth(store) { MonthReviewBanner(lastMonth: m) }
             hero
             statRow
+            if !store.banks.isEmpty { ForecastCard() }
+
+            let upcoming = store.upcomingCharges(within: 7)
+            if !upcoming.isEmpty {
+                section("Upcoming", "Insights →", { store.tab = .insights }) {
+                    VStack(spacing: 9) {
+                        ForEach(upcoming) { g in
+                            HStack(spacing: 10) {
+                                IconChip(symbol: "repeat", brandIcon: BrandCatalog.icon(for: g.name))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(g.name).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink).lineLimit(1)
+                                    if let d = g.nextDate {
+                                        Text(d.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
+                                            .font(.caption2).foregroundStyle(Zen.ink3)
+                                    }
+                                }
+                                Spacer()
+                                Text("\(g.variableAmount ? "~" : "")\(INR.compact(g.expectedAmount))")
+                                    .font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                            }
+                        }
+                    }
+                }
+            }
 
             section("This month's plan", "All →", { store.tab = .plan }) {
                 if store.categories.isEmpty {
@@ -53,6 +78,9 @@ struct HomeView: View {
                 Button { store.tab = .goals } label: {
                     Label("Lv \(store.level)", systemImage: "bolt.fill").labelStyle(.titleAndIcon)
                 }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { sheet = .txns } label: { Image(systemName: "magnifyingglass") }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { sheet = .settings } label: { Image(systemName: "gearshape") }
@@ -154,6 +182,18 @@ struct HomeView: View {
             .padding(.horizontal, 10).padding(.vertical, 4)
             .glassEffect(.regular.tint(Zen.green.opacity(0.18)), in: .capsule)
             .padding(.top, 8)
+
+            // The headline stays LIQUID net worth — that's the number users know, and the milestone
+            // ladder is built on it. Loans are surfaced as a labelled subtitle, never by silently
+            // changing the big figure.
+            if store.hasLoans {
+                Button { store.tab = .wealth } label: {
+                    Text("\(INR.compact(store.netWorth)) incl. loans")
+                        .font(.caption2.weight(.semibold)).foregroundStyle(Zen.ink3)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+            }
 
             VStack(spacing: 7) {
                 HStack {

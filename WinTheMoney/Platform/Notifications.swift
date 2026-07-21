@@ -56,6 +56,43 @@ enum NotificationManager {
             .removePendingNotificationRequests(withIdentifiers: [cardDueId(mask, "t3"), cardDueId(mask, "due")])
     }
 
+    private static let recurringPrefix = "recurring-"
+
+    /// Reminders one day before each predicted recurring charge.
+    ///
+    /// Cancel-and-reschedule as a SET: every pending `recurring-` request is removed first, so a
+    /// recompute that drops or re-dates a group can't leave an orphan behind. Ids are derived from
+    /// the stable group key, so rescheduling replaces rather than duplicates.
+    static func scheduleRecurring(_ charges: [(key: String, name: String, date: Date, amount: Double?)]) {
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { pending in
+            let stale = pending.map(\.identifier).filter { $0.hasPrefix(recurringPrefix) }
+            center.removePendingNotificationRequests(withIdentifiers: stale)
+            guard !charges.isEmpty else { return }
+            center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                guard granted else { return }
+                let cal = Calendar.current
+                for c in charges {
+                    guard let fire = cal.date(byAdding: .day, value: -1, to: c.date).map({
+                        cal.date(bySettingHour: 10, minute: 0, second: 0, of: $0) ?? $0
+                    }), fire > Date() else { continue }
+                    let amount = c.amount.map {
+                        " of ₹\(NumberFormatter.localizedString(from: NSNumber(value: $0), number: .decimal))"
+                    } ?? ""
+                    let content = UNMutableNotificationContent()
+                    content.title = "Upcoming charge"
+                    content.body = "\(c.name)\(amount) is expected tomorrow."
+                    content.sound = .default
+                    let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+                    center.add(UNNotificationRequest(
+                        identifier: recurringPrefix + c.key,
+                        content: content,
+                        trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+                }
+            }
+        }
+    }
+
     /// Fired once per Gmail scan when it queues one or more newly-locked statements (never on
     /// app-launch rehydration of an already-persisted pending list — the caller only invokes this
     /// for genuinely new appends). Not gated by the app's own "Monthly budget reminder" toggle,
