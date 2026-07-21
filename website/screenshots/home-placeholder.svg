@@ -1,0 +1,19 @@
+<svg viewBox="0 0 300 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Home screen placeholder">
+  <defs>
+    <linearGradient id="homeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6E9BD8"/>
+      <stop offset="100%" stop-color="#7FC4A3"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="292" height="612" rx="42" fill="url(#homeGrad)" stroke="#ffffff" stroke-opacity="0.35" stroke-width="4"/>
+  <rect x="110" y="20" width="80" height="18" rx="9" fill="#ffffff" fill-opacity="0.55"/>
+  <g fill="#ffffff" fill-opacity="0.9">
+    <rect x="28" y="120" width="244" height="90" rx="18" fill-opacity="0.18"/>
+    <rect x="28" y="224" width="118" height="70" rx="16" fill-opacity="0.16"/>
+    <rect x="154" y="224" width="118" height="70" rx="16" fill-opacity="0.16"/>
+    <rect x="28" y="308" width="244" height="60" rx="16" fill-opacity="0.14"/>
+    <rect x="28" y="380" width="244" height="60" rx="16" fill-opacity="0.14"/>
+  </g>
+  <text x="150" y="500" text-anchor="middle" font-family="-apple-system,Helvetica,Arial,sans-serif" font-size="17" fill="#ffffff" fill-opacity="0.95">Home — net worth</text>
+  <text x="150" y="524" text-anchor="middle" font-family="-apple-system,Helvetica,Arial,sans-serif" font-size="13" fill="#ffffff" fill-opacity="0.75">screenshot coming soon</text>
+</svg>

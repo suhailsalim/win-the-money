@@ -1,0 +1,60 @@
+name: Deploy site
+
+# Builds the MkDocs site + the static landing page and publishes both to GitHub Pages.
+# Landing page -> https://<user>.github.io/<repo>/
+# Docs         -> https://<user>.github.io/<repo>/docs/
+#
+# NOTE: this workflow does nothing until GitHub Pages is enabled for this repo with
+# "Source: GitHub Actions" (Settings -> Pages) — that is a manual, one-time step for a
+# repo maintainer and is not done by this workflow itself.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install MkDocs Material
+        run: pip install mkdocs-material
+
+      - name: Build docs (strict — fails on broken links/nav)
+        run: mkdocs build --strict -d _site/docs
+
+      - name: Copy static landing page
+        run: cp -r website/. _site/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
