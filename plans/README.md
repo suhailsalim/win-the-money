@@ -15,9 +15,7 @@ no longer match this list.
    was written to land already shipped in #14, so step 1 is done — this is now the harness + assertions
    only. Note the four fixture PDFs are gitignored, so they exist only in the main working copy, not in
    worktrees.
-2. [PLAN-plan-period-cap-snapshots.md](PLAN-plan-period-cap-snapshots.md) — truthful historical
-   budget caps.
-3. [PLAN-axis-scapia-per-txn-rewards.md](PLAN-axis-scapia-per-txn-rewards.md) — EDGE Miles per-txn
+2. [PLAN-axis-scapia-per-txn-rewards.md](PLAN-axis-scapia-per-txn-rewards.md) — EDGE Miles per-txn
    parsing (needs #1). Still open despite #11/#12: `parseHDFC` and `parseICICI` emit per-row rewards,
    but `parseAxis`/`parseScapia` capture only the *account-level* balance via `cardAccount(reward:)`.
    #12 did Axis MCC + forex, not rewards.
@@ -47,6 +45,8 @@ no longer match this list.
 
 ## Shipped
 
+- [PLAN-plan-period-cap-snapshots.md](PLAN-plan-period-cap-snapshots.md) — per-month `capHistory`
+  snapshots so past periods are judged against the cap in force then; current month stays live.
 - [PLAN-backup-rotation-and-safety.md](PLAN-backup-rotation-and-safety.md) — rotating timestamped
   backups (newest 10 per location), auto-backup shrink gate, restore preview + per-backup restore.
   Rotation/pruning verified by a sandboxed swiftc harness, not just a compile.

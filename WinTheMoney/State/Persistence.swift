@@ -26,7 +26,7 @@ extension KeyedDecodingContainer {
 
 // MARK: BudgetCategory
 extension BudgetCategory {
-    enum CodingKeys: String, CodingKey { case id, name, symbol, spent, plan, color, isSystem, period, customMonths, anchor, kind }
+    enum CodingKeys: String, CodingKey { case id, name, symbol, spent, plan, color, isSystem, period, customMonths, anchor, kind, capHistory }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.decode(.id, default: UUID())
@@ -44,6 +44,7 @@ extension BudgetCategory {
         // not .needs) rather than hardcoding the name a second time here.
         kind = CategoryKind(rawValue: c.decode(.kind, default:
             (Store.baseCategories.first { $0.name == name }?.kind ?? .needs).rawValue)) ?? .needs
+        capHistory = c.decode(.capHistory, default: [:])
     }
 }
 

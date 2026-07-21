@@ -51,11 +51,20 @@ struct BudgetCategory: Identifiable, Codable, Hashable {
     var customMonths: Int = 1             // cycle length when period == .custom
     var anchor: Date? = nil               // cycle start (e.g. insurance renewal); nil → financial-year start
     var kind: CategoryKind = .needs       // Need / Want / Investment facet
+    /// "YYYY-MM" → the `monthlyPlan` in force during that month. Written by `Store.snapshotCaps()`
+    /// so a past month is judged against the cap that applied then, not today's. Lives inside the
+    /// category (not a name-keyed map on Store) so it survives renames; deleting a category drops
+    /// its history, same as spend attribution — deliberately no tombstones.
+    var capHistory: [String: Double] = [:]
 
     /// Effective cycle length in months (≥ 1).
     var periodMonths: Int { period == .custom ? max(1, customMonths) : period.months }
     /// The cap normalised to a per-month figure, so non-monthly caps still fold into the monthly overview.
     var monthlyPlan: Double { plan / Double(periodMonths) }
+
+    /// The per-month cap for `key` ("YYYY-MM"). Falls back to the live cap, so months recorded
+    /// before this feature existed behave exactly as they did before — no migration needed.
+    func plan(forMonth key: String) -> Double { capHistory[key] ?? monthlyPlan }
 
     var pct: Double { plan > 0 ? spent / plan : 0 }
     var left: Double { plan - spent }

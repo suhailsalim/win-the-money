@@ -332,6 +332,7 @@ final class Store: ObservableObject {
     /// quarterly/annual/custom cap counts spend over that whole window — e.g. a yearly insurance cap).
     func recomputeSpent() {
         recomputeBankBalances()   // any change to txns can move an anchored account's live balance
+        snapshotCaps()            // keep this month's cap snapshot current as caps are edited
         for i in categories.indices {
             let (start, end) = cycleWindow(for: categories[i])
             let name = categories[i].name
@@ -372,12 +373,42 @@ final class Store: ObservableObject {
             return (start, cal.date(byAdding: .month, value: len, to: start) ?? now)
         }
     }
+    /// Locale/timezone-stable "YYYY-MM" key. Built from Calendar ints, never a DateFormatter,
+    /// so the key can't shift with the device locale or calendar.
+    static func monthKey(_ d: Date) -> String {
+        let c = Calendar.current.dateComponents([.year, .month], from: d)
+        return String(format: "%04d-%02d", c.year ?? 0, c.month ?? 0)
+    }
+
+    /// Plan total for one month, from each category's snapshot of the cap in force then.
+    /// Excludes Investment-kind categories, matching `planTotal`.
+    func capTotal(forMonth key: String) -> Double {
+        categories.filter { $0.kind != .investments }.map { $0.plan(forMonth: key) }.reduce(0, +)
+    }
+
+    /// Records the current month's caps. Called from `recomputeSpent()`, which runs on every mutation
+    /// path, so a month's stored value settles at the cap in force at that month's last moment — the
+    /// correct semantic. Keeps ~36 months; "YYYY-MM" sorts lexicographically, so pruning is a compare.
+    func snapshotCaps() {
+        let key = Self.monthKey(Date())
+        let cutoff = Self.monthKey(Calendar.current.date(byAdding: .month, value: -36, to: Date()) ?? Date())
+        for i in categories.indices {
+            categories[i].capHistory[key] = categories[i].monthlyPlan
+            if categories[i].capHistory.contains(where: { $0.key < cutoff }) {
+                categories[i].capHistory = categories[i].capHistory.filter { $0.key >= cutoff }
+            }
+        }
+    }
+
     var planMonths: [PlanMonth] {
         let cal = Calendar.current
         return (0...5).reversed().compactMap { i -> PlanMonth? in
             guard let d = cal.date(byAdding: .month, value: -i, to: Date()) else { return nil }
             let spend = monthSpend(monthsAgo: i)
-            let pct = planTotal > 0 ? Int((spend/planTotal*100).rounded()) : 0
+            // Past months are judged against the cap that applied then; the current month stays live
+            // so an in-month cap edit shows immediately.
+            let total = i == 0 ? planTotal : capTotal(forMonth: Self.monthKey(d))
+            let pct = total > 0 ? Int((spend/total*100).rounded()) : 0
             return PlanMonth(month: d.formatted(.dateTime.month(.abbreviated)), pct: pct, over: pct > 100)
         }
     }
