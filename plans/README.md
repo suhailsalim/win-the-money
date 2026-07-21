@@ -23,9 +23,7 @@ no longer match this list.
 ## Missing features (ranked)
 
 1. [PLAN-loans-emi-tracking.md](PLAN-loans-emi-tracking.md) — loans as liabilities
-2. [PLAN-monthly-report.md](PLAN-monthly-report.md) — shareable month-in-review
-3. [PLAN-app-intents-quick-log.md](PLAN-app-intents-quick-log.md) — Siri/Shortcuts quick logging
-4. [PLAN-cloudkit-sync.md](PLAN-cloudkit-sync.md) — multi-device sync (needs paid dev team; do last)
+2. [PLAN-cloudkit-sync.md](PLAN-cloudkit-sync.md) — multi-device sync (needs paid dev team; do last)
 
 ## Web
 
@@ -34,6 +32,12 @@ no longer match this list.
   and the workflow only runs on `main`. Screenshots are placeholders, not real captures.
 
 ## Shipped
+
+- [PLAN-app-intents-quick-log.md](PLAN-app-intents-quick-log.md) — Siri/Shortcuts quick logging +
+  interactive widget. Reading figures aloud is off by default (`wtm_siri_read_figures`). Intent
+  drain/dedup was driven on the simulator; **Siri voice and the widget itself are unexercised**.
+- [PLAN-monthly-report.md](PLAN-monthly-report.md) — pure `MonthReport` builder (injected date) +
+  share card carrying figures only, no accounts or balances. **The rendered image is unreviewed.**
 
 - [PLAN-cashflow-forecast.md](PLAN-cashflow-forecast.md) — pure `CashflowForecast` (injected date),
   safe-to-spend headline, 30-day sparkline, reconciling breakdown sheet.
