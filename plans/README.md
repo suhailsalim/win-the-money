@@ -27,16 +27,12 @@ no longer match this list.
    are missing.
 2. [PLAN-global-search.md](PLAN-global-search.md) — transaction search & filters. Nothing searchable
    exists anywhere in the app yet.
-3. [PLAN-txn-export.md](PLAN-txn-export.md) — CSV/JSON export. **Partly shipped:** Settings →
-   "Export transactions (CSV)" works via `Store.transactionsCSV()`, but with 6 of the planned 14
-   columns, no JSON DTO, no UTF-8 BOM (so ₹ mojibakes in Excel), no filtered/toolbar export, and no
-   `TxnExporter.swift`.
-4. [PLAN-cashflow-forecast.md](PLAN-cashflow-forecast.md) — safe-to-spend projection. Needs #1 above;
+3. [PLAN-cashflow-forecast.md](PLAN-cashflow-forecast.md) — safe-to-spend projection. Needs #1 above;
    its other dependency (card due dates) shipped in #17.
-5. [PLAN-loans-emi-tracking.md](PLAN-loans-emi-tracking.md) — loans as liabilities
-6. [PLAN-monthly-report.md](PLAN-monthly-report.md) — shareable month-in-review
-7. [PLAN-app-intents-quick-log.md](PLAN-app-intents-quick-log.md) — Siri/Shortcuts quick logging
-8. [PLAN-cloudkit-sync.md](PLAN-cloudkit-sync.md) — multi-device sync (needs paid dev team; do last)
+4. [PLAN-loans-emi-tracking.md](PLAN-loans-emi-tracking.md) — loans as liabilities
+5. [PLAN-monthly-report.md](PLAN-monthly-report.md) — shareable month-in-review
+6. [PLAN-app-intents-quick-log.md](PLAN-app-intents-quick-log.md) — Siri/Shortcuts quick logging
+7. [PLAN-cloudkit-sync.md](PLAN-cloudkit-sync.md) — multi-device sync (needs paid dev team; do last)
 
 ## Web
 
@@ -44,6 +40,9 @@ no longer match this list.
   but `.github/` holds only a PR template, so nothing publishes yet.
 
 ## Shipped
+
+- [PLAN-txn-export.md](PLAN-txn-export.md) — `TxnExporter` CSV (14 cols, RFC-4180, UTF-8 BOM) + JSON
+  DTO; exports the filtered list from the transactions toolbar and everything from Settings.
 
 - [PLAN-plan-period-cap-snapshots.md](PLAN-plan-period-cap-snapshots.md) — per-month `capHistory`
   snapshots so past periods are judged against the cap in force then; current month stays live.

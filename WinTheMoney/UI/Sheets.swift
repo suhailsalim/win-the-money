@@ -14,12 +14,14 @@ struct BackupFile: FileDocument {
     init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
+/// Carries `Data`, not `String` — the CSV ships a UTF-8 BOM and re-encoding through a String
+/// would strip it, which is exactly what makes ₹ mojibake in Excel.
 struct CSVFile: FileDocument {
     static var readableContentTypes: [UTType] { [.commaSeparatedText, .plainText] }
-    var text: String
-    init(_ t: String) { text = t }
-    init(configuration: ReadConfiguration) throws { text = String(data: configuration.file.regularFileContents ?? Data(), encoding: .utf8) ?? "" }
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: Data(text.utf8)) }
+    var data: Data
+    init(_ d: Data) { data = d }
+    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 
 private func stamp() -> String {
@@ -66,6 +68,8 @@ struct TransactionsSheet: View {
     @State private var toDate = Date()
     @State private var tag: String? = nil
     @State private var hideTransfers = false
+    @State private var exportCSV = false
+    @State private var exportJSON = false
 
     /// Default presentation, or pre-filtered for a drill-in (a category, account, or tag).
     init(account: String? = nil, category: String? = nil, tag: String? = nil) {
@@ -149,8 +153,21 @@ struct TransactionsSheet: View {
                         Image(systemName: activeCount > 0 ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Exports exactly what's on screen — the active filters, in the chosen sort order.
+                    Menu {
+                        Button { exportCSV = true } label: { Label("Export as CSV", systemImage: "tablecells") }
+                        Button { exportJSON = true } label: { Label("Export as JSON", systemImage: "curlybraces") }
+                    } label: { Image(systemName: "square.and.arrow.up") }
+                }
                 ToolbarItem(placement: .topBarTrailing) { Button { showLog = true } label: { Image(systemName: "plus") } }
             }
+            .fileExporter(isPresented: $exportCSV, document: CSVFile(TxnExporter.csv(filtered)),
+                          contentType: .commaSeparatedText,
+                          defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in }
+            .fileExporter(isPresented: $exportJSON, document: BackupFile(TxnExporter.json(filtered)),
+                          contentType: .json,
+                          defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in }
             .sheet(isPresented: $showLog) { LogTxnSheet() }
             .sheet(item: $editing) { LogTxnSheet(editing: $0) }
             .sheet(isPresented: $showFilters) {
@@ -1040,6 +1057,7 @@ struct SettingsSheet: View {
     @State private var lockError: String?
     @State private var showExportJSON = false
     @State private var showExportCSV = false
+    @State private var showExportTxnJSON = false
     @State private var showImport = false
     @State private var showImportChoice = false
     @State private var pendingImportURL: URL?
@@ -1071,8 +1089,10 @@ struct SettingsSheet: View {
                 }
                 clearAfterExport = false
             }
-            .fileExporter(isPresented: $showExportCSV, document: CSVFile(store.transactionsCSV()),
+            .fileExporter(isPresented: $showExportCSV, document: CSVFile(TxnExporter.csv(store.txns)),
                           contentType: .commaSeparatedText, defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in message = "CSV exported" }
+            .fileExporter(isPresented: $showExportTxnJSON, document: BackupFile(TxnExporter.json(store.txns)),
+                          contentType: .json, defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in message = "Transactions JSON exported" }
             .fileImporter(isPresented: $showImport, allowedContentTypes: [.json]) { result in
                 if case .success(let url) = result { pendingImportURL = url; showImportChoice = true }
             }
@@ -1207,6 +1227,7 @@ struct SettingsSheet: View {
             Button { showExportJSON = true } label: { Label("Export backup (JSON)", systemImage: "square.and.arrow.up") }
             Button { showImport = true } label: { Label("Import backup (JSON)", systemImage: "square.and.arrow.down") }
             Button { showExportCSV = true } label: { Label("Export transactions (CSV)", systemImage: "tablecells") }
+            Button { showExportTxnJSON = true } label: { Label("Export transactions (JSON)", systemImage: "curlybraces") }
             if let message { Text(message).font(.caption).foregroundStyle(Zen.greenDeep) }
         } header: { Text("Manual export / import") } footer: {
             Text("Export everything to a file you choose (e.g. iCloud Drive), then import it on a new device. Secrets (API keys) are not included.")

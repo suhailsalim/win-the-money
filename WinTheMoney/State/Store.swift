@@ -1464,17 +1464,6 @@ final class Store: ObservableObject {
         txns += p.txns.filter { !ids.contains($0.id) && !($0.externalId.map { extIds.contains($0) } ?? false) }
     }
 
-    func transactionsCSV() -> String {
-        func esc(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
-        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"; df.locale = Locale(identifier: "en_US_POSIX")
-        var rows = ["Date,Merchant,Category,Account,Amount,Type"]
-        for t in txns.sorted(by: { $0.date < $1.date }) {
-            rows.append([df.string(from: t.date), esc(t.merchant), esc(t.category), esc(t.account),
-                         String(format: "%.2f", abs(t.amount)), t.income ? "Credit" : "Debit"].joined(separator: ","))
-        }
-        return rows.joined(separator: "\n")
-    }
-
     /// First launch: NO financial data. Only the milestone ladder + badge templates
     /// (both derived against real balances, starting at 0 / locked).
     private func firstRun() {
