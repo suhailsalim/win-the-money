@@ -114,18 +114,19 @@ struct MonthReportEntryCard: View {
 // MARK: - Entry point: Home banner (first 5 days of a month)
 
 /// A one-tap nudge to last month's report, shown only in the first 5 days of a new month and only
-/// when last month actually has data. Renders nothing otherwise.
+/// when last month actually has data. The caller gates on `dueMonth(_:)` so nothing — not even an
+/// empty, spacing-consuming child — is added to Home the rest of the time.
 struct MonthReviewBanner: View {
-    @EnvironmentObject var store: Store
+    var lastMonth: Date
     @State private var showing = false
 
-    private var lastMonth: Date? {
-        guard Calendar.current.component(.day, from: Date()) <= 5 else { return nil }
-        return MonthReport.lastCompleteMonth(txns: store.txns, now: Date())
+    /// The month to nudge about, or nil when the banner shouldn't appear at all.
+    static func dueMonth(_ store: Store, now: Date = Date()) -> Date? {
+        guard Calendar.current.component(.day, from: now) <= 5 else { return nil }
+        return MonthReport.lastCompleteMonth(txns: store.txns, now: now)
     }
 
     var body: some View {
-        if let lastMonth {
             Button { showing = true } label: {
                 HStack(spacing: 12) {
                     IconChip(symbol: "calendar.badge.checkmark", tint: Zen.greenDeep)
@@ -146,7 +147,6 @@ struct MonthReviewBanner: View {
             .sheet(isPresented: $showing) {
                 NavigationStack { MonthReportView(month: lastMonth) }
             }
-        }
     }
 }
 
