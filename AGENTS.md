@@ -61,9 +61,11 @@ groups, so the folder tree IS the project structure — add/move files on disk a
 | `Catalogs/` | `BankCatalog.swift`, `CardCatalog.swift`, `BrandCatalog.swift` (+ `Store.classify`), `MarketCatalog.swift` |
 | `Market/` | `QuoteProvider.swift` (Yahoo/AMFI), `FXProvider.swift` |
 | `Platform/` | `Keychain.swift`, `Notifications.swift`, `LiveActivity.swift` |
+| `Intents/` | `AppIntents.swift` (Siri read intents + phrases), `QuickLogStore.swift` (inbox drain into `Store`) |
 
 Top level: `Assets.xcassets` + `WinTheMoney.entitlements` stay at `WinTheMoney/` root (referenced by
-explicit path). `Shared/` (widget snapshot) and `WinTheMoneyWidgets/` are separate targets;
+explicit path). `Shared/` (widget snapshot + `QuickLog.swift`, compiled into both targets — NOT a synchronized
+group, so a new file there needs a pbxproj entry) and `WinTheMoneyWidgets/` are separate targets;
 `Info.plist` / `WinTheMoneyWidgets-Info.plist` sit at repo root (pbxproj paths). Other repo dirs:
 `docs/` (MkDocs: user guide + dev docs), `plans/` (execution plans, see `plans/README.md`),
 `design/` (icons + logo sources), `tools/parser-harness/fixtures/` (local-only real statement PDFs,

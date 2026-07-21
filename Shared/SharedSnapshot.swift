@@ -10,11 +10,11 @@ enum WTMShared {
     /// File-based shared storage. Uses the App Group container when available (so the widget
     /// can read it) and falls back to the app's Documents dir otherwise. Avoids
     /// `UserDefaults(suiteName:)`, which logs a CFPrefs "AnyUser with a container" warning.
-    static var snapshotURL: URL {
-        let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+    static var containerURL: URL {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
             ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return dir.appendingPathComponent("\(snapshotKey).json")
     }
+    static var snapshotURL: URL { containerURL.appendingPathComponent("\(snapshotKey).json") }
 
     /// Compact Indian currency (₹12.4L, ₹1.2Cr, ₹8.5k) — usable from the widget too.
     static func inr(_ v: Double) -> String {
@@ -44,6 +44,10 @@ struct WTMSnapshot: Codable {
     var streakMonths: Int
     var nwHistory: [Double]
     var updated: Date
+    // Added for App Intents (Siri / Shortcuts / interactive widget). Decoded tolerantly in
+    // QuickLog.swift so a snapshot written by an older build still loads.
+    var cats: [WTMCatSnap] = []            // per-category spend vs cap, for CheckBudgetIntent + Siri options
+    var quickPresets: [WTMQuickPreset] = [] // widget one-tap buttons, derived from real cash spends
 
     var planPct: Double { plan > 0 ? min(1, spent/plan) : 0 }
     var goalPct: Double { topGoalTarget > 0 ? min(1, topGoalSaved/topGoalTarget) : 0 }
