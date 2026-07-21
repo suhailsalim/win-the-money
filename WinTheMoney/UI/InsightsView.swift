@@ -15,6 +15,7 @@ struct InsightsView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     periodChips
+                    MonthReportEntryCard()
                     AIInsightsCard()
                     tagCard
                     subscriptionsCard

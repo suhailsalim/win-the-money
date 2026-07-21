@@ -12,6 +12,7 @@ struct HomeView: View {
         VStack(spacing: 22) {
             if !gmail.pending.isEmpty { pendingBanner }
             if !dueCards.isEmpty { cardDueBanner }
+            if let m = MonthReviewBanner.dueMonth(store) { MonthReviewBanner(lastMonth: m) }
             hero
             statRow
             if !store.banks.isEmpty { ForecastCard() }
