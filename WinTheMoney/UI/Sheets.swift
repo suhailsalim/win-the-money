@@ -1054,6 +1054,7 @@ struct SettingsSheet: View {
                 profileSection
                 connectionsSection
                 securitySection
+                SiriSettingsSection()
                 notificationsSection
                 backupSection
                 dataSection

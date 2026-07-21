@@ -39,6 +39,7 @@ struct WinTheMoneyApp: App {
                 StatementBackground.schedule()
             case .active:
                 lock.didBecomeActive()
+                store.drainQuickLogInbox()   // Siri/Shortcuts/widget quick logs → Store (main thread)
                 Task { await gmail.backgroundScanIfDue(into: store) }
                 Task { await gmail.statementScanIfDue(into: store) }
             default: break

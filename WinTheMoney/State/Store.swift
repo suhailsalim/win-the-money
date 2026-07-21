@@ -592,7 +592,8 @@ final class Store: ObservableObject {
         WTMSnapshot(netWorth: liquidNetWorth, netWorthChange: nwChange, spent: spentTotal, plan: planTotal,
                     targetPct: toTargetPct, topGoalTitle: g?.title ?? "No goal yet",
                     topGoalSaved: g?.saved ?? 0, topGoalTarget: g?.target ?? 1,
-                    streakMonths: streakMonths, nwHistory: nwHistory, updated: Date()).save()
+                    streakMonths: streakMonths, nwHistory: nwHistory, updated: Date(),
+                    cats: intentCategorySnaps, quickPresets: intentQuickPresets).save()
         WidgetCenter.shared.reloadAllTimelines()
         if BudgetLiveActivity.isRunning {
             BudgetLiveActivity.update(spent: spentTotal, plan: planTotal, daysLeft: daysLeftInMonth)
