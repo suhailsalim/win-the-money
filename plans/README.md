@@ -22,8 +22,7 @@ no longer match this list.
 
 ## Missing features (ranked)
 
-1. [PLAN-loans-emi-tracking.md](PLAN-loans-emi-tracking.md) — loans as liabilities
-2. [PLAN-cloudkit-sync.md](PLAN-cloudkit-sync.md) — multi-device sync (needs paid dev team; do last)
+1. [PLAN-cloudkit-sync.md](PLAN-cloudkit-sync.md) — multi-device sync (needs paid dev team; do last)
 
 ## Web
 
@@ -32,6 +31,10 @@ no longer match this list.
   and the workflow only runs on `main`. Screenshots are placeholders, not real captures.
 
 ## Shipped
+
+- [PLAN-loans-emi-tracking.md](PLAN-loans-emi-tracking.md) — `Loan`/`LoanAdjustment` models, pure
+  `LoanMath` amortisation (injected dates), EMI→loan txn linking, net-worth-net-of-loans, Wealth
+  section. Persistence independently round-trip verified. **EMI auto-linking is unexercised at runtime.**
 
 - [PLAN-app-intents-quick-log.md](PLAN-app-intents-quick-log.md) — Siri/Shortcuts quick logging +
   interactive widget. Reading figures aloud is off by default (`wtm_siri_read_figures`). Intent
