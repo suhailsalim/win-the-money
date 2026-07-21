@@ -155,6 +155,18 @@ struct HomeView: View {
             .glassEffect(.regular.tint(Zen.green.opacity(0.18)), in: .capsule)
             .padding(.top, 8)
 
+            // The headline stays LIQUID net worth — that's the number users know, and the milestone
+            // ladder is built on it. Loans are surfaced as a labelled subtitle, never by silently
+            // changing the big figure.
+            if store.hasLoans {
+                Button { store.tab = .wealth } label: {
+                    Text("\(INR.compact(store.netWorth)) incl. loans")
+                        .font(.caption2.weight(.semibold)).foregroundStyle(Zen.ink3)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+            }
+
             VStack(spacing: 7) {
                 HStack {
                     Label("Road to \(store.targetLabel)", systemImage: "leaf").font(.caption.weight(.semibold)).foregroundStyle(Zen.ink2)

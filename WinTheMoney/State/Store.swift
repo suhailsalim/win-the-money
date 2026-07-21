@@ -17,6 +17,8 @@ final class Store: ObservableObject {
     @Published var milestones: [Milestone] = []
     @Published var badges: [Badge] = []
     @Published var investments: [Investment] = []
+    /// Borrowings (home/car/personal…). Derived surface lives in `Store+Loans.swift`.
+    @Published var loans: [Loan] = []
 
     // statement ingestion ledger + the conflicts queue (rows a parser couldn't fully resolve)
     @Published var statements: [StatementRecord] = []
@@ -119,7 +121,8 @@ final class Store: ObservableObject {
         [ Segment(label: "Bank balances", value: banksTotal, colorHex: "6E9BD8"),
           Segment(label: "Investments", value: investmentsTotal, colorHex: "5BA585"),
           Segment(label: "FD & RD", value: depositsTotal, colorHex: "7FC4A3"),
-          Segment(label: "Credit owed", value: -cardsTotal, colorHex: "9AA7BE") ]
+          Segment(label: "Credit owed", value: -cardsTotal, colorHex: "9AA7BE"),
+          Segment(label: "Loans", value: -loansOutstanding, colorHex: "7C8AA5") ]
             .filter { $0.value != 0 }
     }
 
@@ -281,6 +284,7 @@ final class Store: ObservableObject {
     /// quarterly/annual/custom cap counts spend over that whole window — e.g. a yearly insurance cap).
     func recomputeSpent() {
         recomputeBankBalances()   // any change to txns can move an anchored account's live balance
+        applyLoanLinks()          // EMI debits → "EMI & Loans" + "EMI" tag + linked loan (before totals)
         for i in categories.indices {
             let (start, end) = cycleWindow(for: categories[i])
             let name = categories[i].name
@@ -1152,6 +1156,7 @@ final class Store: ObservableObject {
         var badges: [Badge] = []
         var incomeStreams: [IncomeStream] = []
         var investments: [Investment] = []
+        var loans: [Loan] = []
         var statements: [StatementRecord] = []
         var conflicts: [DataConflict] = []
         var nwHistory: [Double] = []
@@ -1174,6 +1179,7 @@ final class Store: ObservableObject {
             badges     = c.decode(.badges, default: [])
             incomeStreams = c.decode(.incomeStreams, default: [])
             investments = c.decode(.investments, default: [])
+            loans      = c.decode(.loans, default: [])
             statements = c.decode(.statements, default: [])
             conflicts  = c.decode(.conflicts, default: [])
             nwHistory  = c.decode(.nwHistory, default: [])
@@ -1190,6 +1196,7 @@ final class Store: ObservableObject {
         p.categories = categories; p.txns = txns; p.banks = banks; p.cards = cards
         p.deposits = deposits; p.goals = goals; p.milestones = milestones; p.badges = badges
         p.incomeStreams = incomeStreams; p.investments = investments; p.nwHistory = nwHistory
+        p.loans = loans
         p.statements = statements; p.conflicts = conflicts
         p.fxRates = fxRates; p.taxProfile = taxProfile; p.payslips = payslips
         p.advanceTaxPaidStages = Array(advanceTaxPaidStages)
@@ -1201,6 +1208,7 @@ final class Store: ObservableObject {
         categories = p.categories; txns = p.txns; banks = p.banks; cards = p.cards
         deposits = p.deposits; goals = p.goals; milestones = p.milestones; badges = p.badges
         incomeStreams = p.incomeStreams; investments = p.investments; nwHistory = p.nwHistory
+        loans = p.loans
         statements = p.statements; conflicts = p.conflicts
         fxRates = p.fxRates.isEmpty ? ["INR": 1] : p.fxRates
         taxProfile = p.taxProfile; payslips = p.payslips
@@ -1280,7 +1288,7 @@ final class Store: ObservableObject {
     /// kept (the user's recovery option). Gmail/Setu are reset by their own managers.
     func clearAll() {
         categories = []; txns = []; banks = []; cards = []; deposits = []; goals = []
-        investments = []; incomeStreams = []; nwHistory = []
+        investments = []; incomeStreams = []; nwHistory = []; loans = []
         statements = []; conflicts = []
         taxProfile = TaxProfile(); payslips = []; advanceTaxPaidStages = []; merchantRules = [:]
         fxRates = ["INR": 1]
@@ -1374,7 +1382,7 @@ final class Store: ObservableObject {
         }
         union(&categories, p.categories); union(&banks, p.banks); union(&cards, p.cards)
         union(&deposits, p.deposits); union(&goals, p.goals); union(&incomeStreams, p.incomeStreams)
-        union(&investments, p.investments)
+        union(&investments, p.investments); union(&loans, p.loans)
         let extIds = Set(txns.compactMap(\.externalId)); let ids = Set(txns.map(\.id))
         txns += p.txns.filter { !ids.contains($0.id) && !($0.externalId.map { extIds.contains($0) } ?? false) }
     }

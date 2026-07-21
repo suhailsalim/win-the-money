@@ -88,6 +88,7 @@ struct Txn: Identifiable, Codable, Hashable {
     var rewardCurrency: String? = nil // unit for `reward`, varies by card (e.g. "Reward Points", "EDGE Miles", "Cashback", "Scapia Coins")
     var forexCurrency: String? = nil  // original currency of an international spend (e.g. "EUR"); nil = domestic
     var forexAmount: Double? = nil    // amount in the original currency; `amount` holds the INR value
+    var loanId: UUID? = nil           // the Loan this EMI debit services (set by Store.applyLoanLinks)
     var income: Bool { amount > 0 }
     var isRefund: Bool { tags.contains("Refund") }
     var isInternational: Bool { forexCurrency != nil || tags.contains("International") }
@@ -212,6 +213,95 @@ struct Deposit: Identifiable, Codable, Hashable {
     }
     var maturesText: String { maturityDate.formatted(.dateTime.month(.abbreviated).year()) }
     var sub: String { tag == "RD" ? "Recurring deposit" : "Fixed deposit" }
+}
+
+// MARK: - Loan (liability)
+/// A manual principal adjustment — a prepayment / part-payment / foreclosure amount knocked off
+/// the schedule on `date`. Prepayments break pure amortisation, so they're applied as segment
+/// boundaries by `LoanMath`. (Deliberately a manual-entry hook, not a statement parser.)
+struct LoanAdjustment: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var date: Date = Date()
+    var amount: Double = 0        // principal knocked off (positive)
+    var note: String = ""
+}
+
+/// A borrowing — home / car / personal / education loan. Net worth subtracts its **amortised**
+/// outstanding, never the sum of its EMI transactions: those debits already left the bank balance,
+/// so counting them here too would subtract the same rupee twice (see `Store.netWorth`).
+struct Loan: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String = ""
+    var lender: String = ""
+    var principal: Double = 0          // sanctioned principal
+    var rate: Double = 0               // annual reducing-balance rate, %
+    var emi: Double = 0
+    var startDate: Date = Date()       // schedule start (disbursal); the first EMI falls due a month later
+    var tenureMonths: Int = 0
+    var mask: String = ""              // last 4 of the loan account number
+    var counterpartyKey: String = ""   // Store.ruleKey of the linked EMI counterparty / recurring group
+    var symbol: String = "house.fill"
+    var principalAdjustments: [LoanAdjustment] = []
+    /// Manual recalibration anchor — the cheap answer to floating rates and statement-stated
+    /// balances, mirroring the bank balance-anchor idiom: amortisation restarts from
+    /// `anchorPrincipal` as of `anchorAsOf` instead of from the original sanction.
+    var anchorPrincipal: Double? = nil
+    var anchorAsOf: Date? = nil
+    var closed: Bool = false           // fully repaid / foreclosed — kept for history, excluded from net worth
+
+    /// Common loan kinds, only used to seed a sensible icon in the add sheet.
+    static let symbols: [(label: String, symbol: String)] = [
+        ("Home", "house.fill"), ("Car", "car.fill"), ("Personal", "person.fill"),
+        ("Education", "graduationcap.fill"), ("Gold", "seal.fill"), ("Other", "banknote.fill"),
+    ]
+}
+
+extension Loan {
+    /// Where amortisation is measured from — the recalibration anchor when set, else the sanction.
+    var schedulePrincipal: Double { anchorPrincipal ?? principal }
+    var scheduleStart: Date { anchorAsOf ?? startDate }
+
+    /// EMIs already served before the anchor, so the tenure cap stays honest after a recalibration.
+    func servedBeforeAnchor(_ calendar: Calendar) -> Int {
+        anchorAsOf.map { LoanMath.paymentsElapsed(from: startDate, to: $0, calendar: calendar) } ?? 0
+    }
+
+    /// Scheduled outstanding principal at `asOf` (prepayments applied, capped at the tenure).
+    /// `asOf` is always injected — this stays a pure function of its inputs.
+    func outstanding(asOf: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> Double {
+        if closed { return 0 }
+        let served = servedBeforeAnchor(calendar)
+        if tenureMonths > 0, served >= tenureMonths { return 0 }
+        let cap = tenureMonths > 0 ? tenureMonths - served : 0   // 0 ⇒ no cap (open-ended tenure)
+        return LoanMath.outstanding(principal: schedulePrincipal, annualRate: rate, emi: emi,
+                                    tenureMonths: cap, start: scheduleStart, asOf: asOf,
+                                    adjustments: principalAdjustments.map { (date: $0.date, amount: $0.amount) },
+                                    calendar: calendar)
+    }
+    /// EMIs the schedule says should have been paid by `asOf` (capped at the tenure).
+    func scheduledPayments(asOf: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> Int {
+        let elapsed = LoanMath.paymentsElapsed(from: startDate, to: asOf, calendar: calendar)
+        return tenureMonths > 0 ? min(tenureMonths, elapsed) : elapsed
+    }
+    func monthsLeft(asOf: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> Int {
+        LoanMath.monthsRemaining(tenureMonths: tenureMonths, start: startDate, asOf: asOf, calendar: calendar)
+    }
+    /// Share of the *principal* repaid, 0…1 — what the user means by "how far through am I".
+    func paidFraction(asOf: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> Double {
+        guard principal > 0 else { return 0 }
+        return min(1, max(0, (principal - outstanding(asOf: asOf, calendar: calendar)) / principal))
+    }
+    var displayName: String { name.isEmpty ? (lender.isEmpty ? "Loan" : "\(lender) loan") : name }
+    var rateText: String {
+        let r = (rate * 100).rounded() / 100
+        return (r == r.rounded() ? String(Int(r)) : String(format: "%.2f", r)) + "%"
+    }
+    var tenureText: String {
+        guard tenureMonths > 0 else { return "Open-ended" }
+        let y = tenureMonths / 12, m = tenureMonths % 12
+        if y == 0 { return "\(m)mo" }
+        return m == 0 ? "\(y)y" : "\(y)y \(m)mo"
+    }
 }
 
 // MARK: - Investment (stocks & mutual funds)
