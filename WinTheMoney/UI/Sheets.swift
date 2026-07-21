@@ -70,6 +70,7 @@ struct TransactionsSheet: View {
     @State private var hideTransfers = false
     @State private var exportCSV = false
     @State private var exportJSON = false
+    @State private var query = ""
 
     /// Default presentation, or pre-filtered for a drill-in (a category, account, or tag).
     init(account: String? = nil, category: String? = nil, tag: String? = nil) {
@@ -97,6 +98,10 @@ struct TransactionsSheet: View {
 
     private var filtered: [Txn] {
         var xs = store.txns
+        // Search narrows *within* whatever preset the drill-in supplied, so it composes with it
+        // rather than replacing it.
+        let words = Store.searchWords(query)
+        if !words.isEmpty { xs = xs.filter { store.txnMatches($0, words: words) } }
         if let a = account { xs = xs.filter { $0.account == a } }
         if let c = category { xs = xs.filter { $0.category == c } }
         if let tg = tag { xs = xs.filter { $0.tags.contains(tg) } }
@@ -162,6 +167,8 @@ struct TransactionsSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) { Button { showLog = true } label: { Image(systemName: "plus") } }
             }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Merchant, payee, tag or amount")
             .fileExporter(isPresented: $exportCSV, document: CSVFile(TxnExporter.csv(filtered)),
                           contentType: .commaSeparatedText,
                           defaultFilename: "WinTheMoney-transactions-\(stamp())") { _ in }

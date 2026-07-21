@@ -55,6 +55,9 @@ struct HomeView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
+                Button { sheet = .txns } label: { Image(systemName: "magnifyingglass") }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button { sheet = .settings } label: { Image(systemName: "gearshape") }
             }
         }

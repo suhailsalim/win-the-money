@@ -9,7 +9,7 @@ final class Store: ObservableObject {
     @Published var tab: Tab = .home
 
     @Published var categories: [BudgetCategory] = []
-    @Published var txns: [Txn] = []
+    @Published var txns: [Txn] = [] { didSet { searchBlobs.removeAll(keepingCapacity: true) } }
     @Published var banks: [BankAccount] = []
     @Published var cards: [CreditCard] = []
     @Published var deposits: [Deposit] = []
@@ -412,6 +412,73 @@ final class Store: ObservableObject {
             return PlanMonth(month: d.formatted(.dateTime.month(.abbreviated)), pct: pct, over: pct > 100)
         }
     }
+    // MARK: - Search
+    /// Every optional; an all-nil filter matches everything. Kept a plain struct so callers can
+    /// compose drill-in presets with live chips without any shared state.
+    struct TxnFilter {
+        var account: String? = nil
+        var category: String? = nil
+        var tag: String? = nil
+        var from: Date? = nil
+        var to: Date? = nil
+        var minAmount: Double? = nil
+        var maxAmount: Double? = nil
+        var internationalOnly = false
+        var needsReviewOnly = false
+        var hideTransfers = false
+    }
+
+    /// Lowercased, diacritic-folded haystack per txn, built once per `txns` change rather than per
+    /// keystroke (thousands of rows × every character typed would otherwise refold the whole ledger).
+    private var searchBlobs: [UUID: String] = [:]
+
+    private func searchBlob(for t: Txn) -> String {
+        if let b = searchBlobs[t.id] { return b }
+        // Includes counterparty: UPI payees live there and usually differ from the cleaned merchant.
+        let b = [t.merchant, t.counterparty ?? "", t.category, t.account, t.tags.joined(separator: " ")]
+            .joined(separator: " ")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        searchBlobs[t.id] = b
+        return b
+    }
+
+    /// Split a raw query into normalised words. Multi-word queries AND together, and each word may
+    /// match a different field.
+    static func searchWords(_ q: String) -> [String] {
+        q.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .split(whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    /// A numeric word also matches |amount| within ±0.5 — users type "649" for a −649 spend.
+    func txnMatches(_ t: Txn, words: [String]) -> Bool {
+        guard !words.isEmpty else { return true }
+        let hay = searchBlob(for: t)
+        return words.allSatisfy { w in
+            if hay.contains(w) { return true }
+            if let n = Double(w) { return abs(abs(t.amount) - n) <= 0.5 }
+            return false
+        }
+    }
+
+    /// Pure search + filter over the whole ledger. Transfers stay visible unless explicitly hidden —
+    /// finding a card bill payment is a legitimate search.
+    func searchTxns(_ query: String, filter: TxnFilter = TxnFilter()) -> [Txn] {
+        var xs = txns
+        if let a = filter.account { xs = xs.filter { $0.account == a } }
+        if let c = filter.category { xs = xs.filter { $0.category == c } }
+        if let tg = filter.tag { xs = xs.filter { $0.tags.contains(tg) } }
+        if let f = filter.from { xs = xs.filter { $0.date >= f } }
+        if let t = filter.to { xs = xs.filter { $0.date <= t } }
+        if let lo = filter.minAmount { xs = xs.filter { abs($0.amount) >= lo } }
+        if let hi = filter.maxAmount { xs = xs.filter { abs($0.amount) <= hi } }
+        if filter.internationalOnly { xs = xs.filter(\.isInternational) }
+        if filter.needsReviewOnly { xs = xs.filter(\.needsReview) }
+        if filter.hideTransfers { xs = xs.filter { !$0.transfer } }
+        let words = Self.searchWords(query)
+        guard !words.isEmpty else { return xs }
+        return xs.filter { txnMatches($0, words: words) }
+    }
+
     /// Net spend for one category within an arbitrary [from, to) window (for Plan period/month views).
     func spend(inCategory name: String, from: Date, to: Date) -> Double {
         max(0, txns.filter { $0.category == name && $0.date >= from && $0.date < to }
