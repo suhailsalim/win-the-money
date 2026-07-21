@@ -15,6 +15,29 @@ struct HomeView: View {
             hero
             statRow
 
+            let upcoming = store.upcomingCharges(within: 7)
+            if !upcoming.isEmpty {
+                section("Upcoming", "Insights →", { store.tab = .insights }) {
+                    VStack(spacing: 9) {
+                        ForEach(upcoming) { g in
+                            HStack(spacing: 10) {
+                                IconChip(symbol: "repeat", brandIcon: BrandCatalog.icon(for: g.name))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(g.name).font(.subheadline.weight(.semibold)).foregroundStyle(Zen.ink).lineLimit(1)
+                                    if let d = g.nextDate {
+                                        Text(d.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
+                                            .font(.caption2).foregroundStyle(Zen.ink3)
+                                    }
+                                }
+                                Spacer()
+                                Text("\(g.variableAmount ? "~" : "")\(INR.compact(g.expectedAmount))")
+                                    .font(.subheadline.weight(.bold)).foregroundStyle(Zen.ink)
+                            }
+                        }
+                    }
+                }
+            }
+
             section("This month's plan", "All →", { store.tab = .plan }) {
                 if store.categories.isEmpty {
                     EmptyState(icon: "chart.pie", title: "No budget yet",

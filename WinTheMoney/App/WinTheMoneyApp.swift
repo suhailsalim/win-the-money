@@ -39,6 +39,9 @@ struct WinTheMoneyApp: App {
                 StatementBackground.schedule()
             case .active:
                 lock.didBecomeActive()
+                // Predictions move as new charges land, so re-derive reminders as a set on each
+                // activation rather than trying to patch individual pending notifications.
+                store.rescheduleRecurringReminders()
                 Task { await gmail.backgroundScanIfDue(into: store) }
                 Task { await gmail.statementScanIfDue(into: store) }
             default: break

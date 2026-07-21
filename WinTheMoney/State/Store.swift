@@ -30,6 +30,9 @@ final class Store: ObservableObject {
 
     /// Learned merchant/counterparty → category name (auto-applied on import).
     @Published var merchantRules: [String: String] = [:]
+    /// Recurring group keys the user muted ("not a subscription"). Muted groups stay listed but
+    /// drop out of upcoming charges, burn totals and notifications.
+    @Published var mutedRecurringKeys: Set<String> = []
 
     // live FX rates (currency → INR), persisted & refreshed
     @Published var fxRates: [String: Double] = ["INR": 1]
@@ -1215,18 +1218,149 @@ final class Store: ObservableObject {
     }
 
     // MARK: recurring transfers
-    struct RecurringGroup: Identifiable { var id: String { key }; var key: String; var name: String; var count: Int; var total: Double; var lastDate: Date; var category: String; var linked: Bool }
+    /// How often a recurring charge repeats. Buckets are deliberately wide: real billing dates drift
+    /// by a few days (weekends, month lengths, bank holidays).
+    enum RecurringCadence: String, CaseIterable {
+        case weekly, monthly, quarterly, annual
+        /// Nominal gap in days, used to project the next charge.
+        var days: Int { switch self { case .weekly: 7; case .monthly: 30; case .quarterly: 91; case .annual: 365 } }
+        var label: String { rawValue.capitalized }
+        /// Monthly-equivalent multiplier, so cadences fold into one burn figure.
+        var perMonth: Double { 30.0 / Double(days) }
+        /// The bucket a gap of `d` days falls in, or nil if it matches no cadence.
+        static func bucket(days d: Double) -> RecurringCadence? {
+            switch d {
+            case 6...8: .weekly
+            case 26...35: .monthly
+            case 85...100: .quarterly
+            case 350...380: .annual
+            default: nil
+            }
+        }
+    }
+
+    struct RecurringGroup: Identifiable {
+        var id: String { key }
+        var key: String; var name: String; var count: Int; var total: Double; var lastDate: Date
+        var category: String; var linked: Bool
+        var cadence: RecurringCadence? = nil
+        var confidence: Double = 0
+        var expectedAmount: Double = 0
+        /// Amounts swing >20% (an electricity autopay, not a fixed subscription): show "~" and keep it
+        /// out of the fixed-subscription burn total.
+        var variableAmount: Bool = false
+        var nextDate: Date? = nil
+        /// Two or more cycles have passed with no charge — surfaced as "possibly cancelled" rather
+        /// than silently predicted forever.
+        var possiblyCancelled: Bool = false
+        var muted: Bool = false
+        /// A transfer or income group (SIP, self-transfer). Still worth a reminder — "fund the
+        /// account" is the most valuable alert — but never counted as subscription spend.
+        var isTransfer: Bool = false
+    }
+
+    /// Median of a non-empty list; caller guarantees non-empty.
+    static func median(_ xs: [Double]) -> Double {
+        let s = xs.sorted()
+        guard !s.isEmpty else { return 0 }
+        return s.count % 2 == 1 ? s[s.count / 2] : (s[s.count / 2 - 1] + s[s.count / 2]) / 2
+    }
+
+    /// Infer a cadence from a group's charge dates. Pure and static so it can be exercised offline.
+    /// Needs >= 3 charges and >= 60% of gaps landing in the same bucket.
+    static func inferCadence(dates: [Date]) -> (cadence: RecurringCadence, confidence: Double)? {
+        let sorted = dates.sorted()
+        guard sorted.count >= 3 else { return nil }
+        let gaps = zip(sorted, sorted.dropFirst()).map { $1.timeIntervalSince($0) / 86_400 }
+        guard !gaps.isEmpty, let cad = RecurringCadence.bucket(days: median(gaps)) else { return nil }
+        let hits = gaps.filter { RecurringCadence.bucket(days: $0) == cad }.count
+        let confidence = Double(hits) / Double(gaps.count)
+        return confidence >= 0.6 ? (cad, confidence) : nil
+    }
+
+    /// Next expected charge for a group whose last charge was `last`. Rolls forward at most once when
+    /// the projected date has already passed; returns nil once 2+ cycles have elapsed (likely cancelled).
+    static func projectNext(last: Date, cadence: RecurringCadence, now: Date = Date()) -> Date? {
+        let cal = Calendar.current
+        guard let first = cal.date(byAdding: .day, value: cadence.days, to: last) else { return nil }
+        if first >= now { return first }
+        guard let second = cal.date(byAdding: .day, value: cadence.days, to: first) else { return nil }
+        return second >= now ? second : nil
+    }
+
     var recurringGroups: [RecurringGroup] {
-        let debits = txns.filter { spendContribution($0) > 0 }
-        let groups = Dictionary(grouping: debits) { Self.ruleKey($0.counterparty ?? $0.merchant) }
+        // Include transfers/income here (they're excluded from spend totals downstream, not from
+        // detection) so SIPs and self-transfers can still produce reminders.
+        let candidates = txns.filter { spendContribution($0) > 0 || $0.transfer }
+        let groups = Dictionary(grouping: candidates) { Self.ruleKey($0.counterparty ?? $0.merchant) }
+        let now = Date()
         return groups.compactMap { key, items -> RecurringGroup? in
             guard key.count > 1, items.count >= 3 else { return nil }
-            let total = items.map { abs($0.amount) }.reduce(0, +)
-            let last = items.map(\.date).max() ?? Date()
-            let name = items.first?.merchant ?? key
-            return RecurringGroup(key: key, name: name, count: items.count, total: total, lastDate: last,
-                                  category: items.first?.category ?? "Other", linked: merchantRules[key] != nil)
+            let amounts = items.map { abs($0.amount) }
+            let total = amounts.reduce(0, +)
+            let last = items.map(\.date).max() ?? now
+            var g = RecurringGroup(key: key, name: items.first?.merchant ?? key, count: items.count,
+                                   total: total, lastDate: last,
+                                   category: items.first?.category ?? "Other",
+                                   linked: merchantRules[key] != nil)
+            g.muted = mutedRecurringKeys.contains(key)
+            g.isTransfer = items.contains { $0.transfer } || items.first?.category == "Income"
+            // Price rises are normal, so the expected amount is the median of the last 3 charges
+            // rather than anything that assumes equal amounts.
+            let recent = items.sorted { $0.date > $1.date }.prefix(3).map { abs($0.amount) }
+            g.expectedAmount = Self.median(Array(recent))
+            if g.expectedAmount > 0 {
+                let spread = (amounts.max() ?? 0) - (amounts.min() ?? 0)
+                g.variableAmount = spread / g.expectedAmount > 0.2
+            }
+            if let (cad, conf) = Self.inferCadence(dates: items.map(\.date)) {
+                g.cadence = cad; g.confidence = conf
+                g.nextDate = Self.projectNext(last: last, cadence: cad, now: now)
+                g.possiblyCancelled = g.nextDate == nil
+            }
+            return g
         }.sorted { $0.count > $1.count }
+    }
+
+    /// Predicted charges landing within `days`, soonest first. Muted and cancelled groups drop out.
+    func upcomingCharges(within days: Int = 7) -> [RecurringGroup] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date()
+        return recurringGroups
+            .filter { !$0.muted && !$0.possiblyCancelled }
+            .filter { g in g.nextDate.map { $0 <= cutoff } ?? false }
+            .sorted { ($0.nextDate ?? .distantFuture) < ($1.nextDate ?? .distantFuture) }
+    }
+
+    /// Fixed-subscription burn per month. Excludes variable-amount bills and transfers/SIPs — a
+    /// 50k SIP is not a subscription cost — and excludes muted groups.
+    var subscriptionBurn: Double {
+        recurringGroups
+            .filter { !$0.muted && !$0.possiblyCancelled && !$0.variableAmount && !$0.isTransfer }
+            .compactMap { g in g.cadence.map { g.expectedAmount * $0.perMonth } }
+            .reduce(0, +)
+    }
+
+    /// Variable recurring bills (electricity, phone) per month — reported separately from the fixed burn.
+    var recurringBillsBurn: Double {
+        recurringGroups
+            .filter { !$0.muted && !$0.possiblyCancelled && $0.variableAmount && !$0.isTransfer }
+            .compactMap { g in g.cadence.map { g.expectedAmount * $0.perMonth } }
+            .reduce(0, +)
+    }
+
+    func toggleRecurringMute(_ key: String) {
+        if mutedRecurringKeys.contains(key) { mutedRecurringKeys.remove(key) } else { mutedRecurringKeys.insert(key) }
+        save()
+        rescheduleRecurringReminders()
+    }
+
+    /// Cancel-and-reschedule as a set, so a recompute can't leave orphaned notifications behind.
+    func rescheduleRecurringReminders() {
+        let upcoming = upcomingCharges(within: 30)
+        NotificationManager.scheduleRecurring(upcoming.compactMap { g in
+            g.nextDate.map { (key: g.key, name: g.name, date: $0,
+                              amount: g.variableAmount ? nil : g.expectedAmount) }
+        })
     }
 
     private static func shortLogo(_ bank: String) -> String {
@@ -1309,6 +1443,7 @@ final class Store: ObservableObject {
         var payslips: [Payslip] = []
         var advanceTaxPaidStages: [Int] = []
         var merchantRules: [String: String] = [:]
+        var mutedRecurringKeys: [String] = []
 
         init() {}
         init(from decoder: Decoder) throws {
@@ -1331,6 +1466,7 @@ final class Store: ObservableObject {
             payslips   = c.decode(.payslips, default: [])
             advanceTaxPaidStages = c.decode(.advanceTaxPaidStages, default: [])
             merchantRules = c.decode(.merchantRules, default: [:])
+            mutedRecurringKeys = c.decode(.mutedRecurringKeys, default: [])
         }
     }
 
@@ -1343,6 +1479,7 @@ final class Store: ObservableObject {
         p.fxRates = fxRates; p.taxProfile = taxProfile; p.payslips = payslips
         p.advanceTaxPaidStages = Array(advanceTaxPaidStages)
         p.merchantRules = merchantRules
+        p.mutedRecurringKeys = Array(mutedRecurringKeys)
         return p
     }
 
@@ -1355,6 +1492,7 @@ final class Store: ObservableObject {
         taxProfile = p.taxProfile; payslips = p.payslips
         advanceTaxPaidStages = Set(p.advanceTaxPaidStages)
         merchantRules = p.merchantRules
+        mutedRecurringKeys = Set(p.mutedRecurringKeys)
         if milestones.isEmpty { milestones = Self.defaultMilestones() }
         if badges.isEmpty { badges = Self.defaultBadges() }
         migrateRentBills()
@@ -1432,6 +1570,7 @@ final class Store: ObservableObject {
         investments = []; incomeStreams = []; nwHistory = []
         statements = []; conflicts = []
         taxProfile = TaxProfile(); payslips = []; advanceTaxPaidStages = []; merchantRules = [:]
+        mutedRecurringKeys = []
         fxRates = ["INR": 1]
         milestones = Self.defaultMilestones()
         badges = Self.defaultBadges()
